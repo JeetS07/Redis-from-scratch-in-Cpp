@@ -1,3 +1,4 @@
+
 #include <winsock2.h>
 #include <iostream>
 #include <cstring>
@@ -37,7 +38,11 @@ int main() {
     serverAddress.sin_port = htons(6379);
 
     // Connect to the server
-    result = connect(clientSocket, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress));
+    result = connect(
+        clientSocket,
+        reinterpret_cast<sockaddr*>(&serverAddress),
+        sizeof(serverAddress)
+    );
 
     if (result == SOCKET_ERROR) {
         std::cerr << "Connection failed: " << WSAGetLastError() << "\n";
@@ -50,12 +55,18 @@ int main() {
 
     std::cout << "Connected to Redis successfully\n";
 
-    // Send SET command
-    const char* setMessage = "*3\r\n$3\r\nSET\r\n$4\r\nname\r\n$4\r\nJeet\r\n";
-    result = send(clientSocket, setMessage, static_cast<int>(strlen(setMessage)), 0);
+    // Send UNKNOWN command
+    const char* unknownMessage = "*1\r\n$7\r\nUNKNOWN\r\n";
+
+    result = send(
+        clientSocket,
+        unknownMessage,
+        static_cast<int>(strlen(unknownMessage)),
+        0
+    );
 
     if (result == SOCKET_ERROR) {
-        std::cerr << "SET send failed: " << WSAGetLastError() << "\n";
+        std::cerr << "UNKNOWN send failed: " << WSAGetLastError() << "\n";
 
         closesocket(clientSocket);
         WSACleanup();
@@ -63,12 +74,19 @@ int main() {
         return 1;
     }
 
-    std::cout << "SET command sent\n";
-    char setBuffer[1024]{};
-    result = recv(clientSocket, setBuffer, sizeof(setBuffer) - 1, 0);
+    std::cout << "UNKNOWN command sent\n";
+
+    char unknownBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        unknownBuffer,
+        sizeof(unknownBuffer) - 1,
+        0
+    );
 
     if (result == SOCKET_ERROR) {
-        std::cerr << "SET receive failed: " << WSAGetLastError() << "\n";
+        std::cerr << "UNKNOWN receive failed: " << WSAGetLastError() << "\n";
 
         closesocket(clientSocket);
         WSACleanup();
@@ -85,13 +103,19 @@ int main() {
         return 1;
     }
 
-    setBuffer[result] = '\0';
-    std::cout << "SET response: " << setBuffer << "\n";
+    unknownBuffer[result] = '\0';
+
+    std::cout << "UNKNOWN response: " << unknownBuffer << "\n";
 
     // Send GET command
-
     const char* getMessage = "*2\r\n$3\r\nGET\r\n$4\r\nname\r\n";
-    result = send(clientSocket, getMessage, static_cast<int>(strlen(getMessage)), 0);
+
+    result = send(
+        clientSocket,
+        getMessage,
+        static_cast<int>(strlen(getMessage)),
+        0
+    );
 
     if (result == SOCKET_ERROR) {
         std::cerr << "GET send failed: " << WSAGetLastError() << "\n";
@@ -103,8 +127,15 @@ int main() {
     }
 
     std::cout << "GET command sent\n";
+
     char getBuffer[1024]{};
-    result = recv(clientSocket, getBuffer, sizeof(getBuffer) - 1, 0);
+
+    result = recv(
+        clientSocket,
+        getBuffer,
+        sizeof(getBuffer) - 1,
+        0
+    );
 
     if (result == SOCKET_ERROR) {
         std::cerr << "GET receive failed: " << WSAGetLastError() << "\n";
@@ -125,14 +156,22 @@ int main() {
     }
 
     getBuffer[result] = '\0';
+
     std::cout << "GET response: " << getBuffer << "\n";
 
     // Send PING command
     const char* pingMessage = "*1\r\n$4\r\nPING\r\n";
-    result = send(clientSocket, pingMessage, static_cast<int>(strlen(pingMessage)), 0);
+
+    result = send(
+        clientSocket,
+        pingMessage,
+        static_cast<int>(strlen(pingMessage)),
+        0
+    );
 
     if (result == SOCKET_ERROR) {
         std::cerr << "PING send failed: " << WSAGetLastError() << "\n";
+
         closesocket(clientSocket);
         WSACleanup();
 
@@ -140,11 +179,19 @@ int main() {
     }
 
     std::cout << "PING command sent\n";
+
     char pingBuffer[1024]{};
-    result = recv(clientSocket, pingBuffer, sizeof(pingBuffer) - 1, 0);
+
+    result = recv(
+        clientSocket,
+        pingBuffer,
+        sizeof(pingBuffer) - 1,
+        0
+    );
 
     if (result == SOCKET_ERROR) {
         std::cerr << "PING receive failed: " << WSAGetLastError() << "\n";
+
         closesocket(clientSocket);
         WSACleanup();
 
@@ -153,6 +200,7 @@ int main() {
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
+
         closesocket(clientSocket);
         WSACleanup();
 
@@ -160,6 +208,7 @@ int main() {
     }
 
     pingBuffer[result] = '\0';
+
     std::cout << "PING response: " << pingBuffer << "\n";
 
     // Cleanup

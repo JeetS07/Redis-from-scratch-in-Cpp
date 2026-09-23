@@ -247,15 +247,19 @@ void handleClient(SOCKET clientSocket) {
 
                 std::cout << "GET command handled successfully\n";
 
-            // Handle unknown commands
+            // Handle unknown commands and incorrect arguments
             } else {
-                std::string response = encodeError("ERR unknown command");
+                std::string response;
+                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET") {
+                    response = encodeError("ERR wrong number of arguments for command");
+                } else {
+                    response = encodeError("ERR unknown command");
+                }
 
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
-
-                std::cout << "Unknown command response sent\n";
+                std::cout << "Error response sent\n";
             }
         }
     }
