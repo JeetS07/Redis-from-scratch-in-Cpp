@@ -107,6 +107,110 @@ int main() {
 
     std::cout << "UNKNOWN response: " << unknownBuffer << "\n";
 
+    // Send SET command
+    const char* setMessage = "*3\r\n$3\r\nSET\r\n$4\r\nname\r\n$4\r\nJeet\r\n";
+
+    result = send(
+        clientSocket,
+        setMessage,
+        static_cast<int>(strlen(setMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "SET send failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    std::cout << "SET command sent\n";
+
+    char setBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        setBuffer,
+        sizeof(setBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "SET receive failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    setBuffer[result] = '\0';
+
+    std::cout << "SET response: " << setBuffer << "\n";
+
+    // Send DEL command
+    const char* delMessage = "*2\r\n$3\r\nDEL\r\n$4\r\nname\r\n";
+
+    result = send(
+        clientSocket,
+        delMessage,
+        static_cast<int>(strlen(delMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "DEL send failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    std::cout << "DEL command sent\n";
+
+    char delBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        delBuffer,
+        sizeof(delBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "DEL receive failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    delBuffer[result] = '\0';
+
+    std::cout << "DEL response: " << delBuffer << "\n";
+
     // Send GET command
     const char* getMessage = "*2\r\n$3\r\nGET\r\n$4\r\nname\r\n";
 

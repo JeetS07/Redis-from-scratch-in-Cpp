@@ -4,6 +4,7 @@
 #include <sstream>
 #include <unordered_map>
 #include <vector>
+#include <algorithm>
 
 #pragma comment(lib, "ws2_32.lib")
 // Store Redis key-value pairs
@@ -127,6 +128,11 @@ std::string encodeNullBulkString() {
     return "$-1\r\n";
 }
 
+// Create a RESP integer response
+std::string encodeInteger(int value) {
+    return ":" + std::to_string(value) + "\r\n";
+}
+
 // Send the complete response to the client
 bool sendResponse(SOCKET clientSocket, const std::string& response) {
     size_t totalSent = 0;
@@ -192,6 +198,7 @@ void handleClient(SOCKET clientSocket) {
             }
 
             std::string command = parsedCommand[0];
+            std::transform(command.begin(), command.end(), command.begin(), ::toupper);
 
             // Handle the PING command
             if (command == "PING" && parsedCommand.size() == 1) {
@@ -246,11 +253,29 @@ void handleClient(SOCKET clientSocket) {
                 }
 
                 std::cout << "GET command handled successfully\n";
+            
+            // Handle the DEL command
+            } else if (command == "DEL" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                auto iterator = database.find(key);
+
+                int deletedCount = 0;
+                if (iterator != database.end()) {
+                    database.erase(iterator);
+                    deletedCount = 1;
+                }
+
+                std::string response = encodeInteger(deletedCount);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "DEL command handled successfully\n";
 
             // Handle unknown commands and incorrect arguments
             } else {
                 std::string response;
-                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET") {
+                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL") {
                     response = encodeError("ERR wrong number of arguments for command");
                 } else {
                     response = encodeError("ERR unknown command");
