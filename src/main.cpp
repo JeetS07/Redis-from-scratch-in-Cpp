@@ -272,10 +272,165 @@ void handleClient(SOCKET clientSocket) {
 
                 std::cout << "DEL command handled successfully\n";
 
+            // Handle the INCR command
+            } else if (command == "INCR" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                auto iterator = database.find(key);
+                int value = 0;
+
+                if (iterator != database.end()) {
+                    try {
+                        value = std::stoi(iterator->second);
+                    } catch (...) {
+                        std::string response = encodeError("ERR value is not an integer or out of range");
+                        if (!sendResponse(clientSocket, response)) {
+                            break;
+                        }
+
+                        std::cout << "INCR failed: value is not an integer\n";
+                        continue;
+                    }
+                }
+
+                value++;
+                database[key] = std::to_string(value);
+                std::string response = encodeInteger(value);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "INCR command handled successfully\n";
+            
+            // Handle the DECR command
+            } else if (command == "DECR" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                auto iterator = database.find(key);
+                int value = 0;
+
+                if (iterator != database.end()) {
+                    try {
+                        value = std::stoi(iterator->second);
+                    } catch (...) {
+                        std::string response = encodeError("ERR value is not an integer or out of range");
+
+                        if (!sendResponse(clientSocket, response)) {
+                            break;
+                        }
+
+                        std::cout << "DECR failed: value is not an integer\n";
+                        continue;
+                    }
+                }
+
+                value--;
+                database[key] = std::to_string(value);
+                std::string response = encodeInteger(value);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "DECR command handled successfully\n";
+
+            // Handle the INCRBY command
+            } else if (command == "INCRBY" && parsedCommand.size() == 3) {
+                const std::string& key = parsedCommand[1];
+                int increment = 0;
+                try {
+                    increment = std::stoi(parsedCommand[2]);
+                } catch (...) {
+                    std::string response = encodeError("ERR value is not an integer or out of range");
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "INCRBY failed: increment is not an integer\n";
+                    continue;
+                }
+
+                auto iterator = database.find(key);
+                int value = 0;
+                if (iterator != database.end()) {
+                    try {
+                        value = std::stoi(iterator->second);
+                    } catch (...) {
+                        std::string response = encodeError("ERR value is not an integer or out of range");
+                        if (!sendResponse(clientSocket, response)) {
+                            break;
+                        }
+
+                        std::cout << "INCRBY failed: value is not an integer\n";
+                        continue;
+                    }
+                }
+
+                value += increment;
+                database[key] = std::to_string(value);
+                std::string response = encodeInteger(value);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "INCRBY command handled successfully\n";
+
+            // Handle the DECRBY command
+            } else if (command == "DECRBY" && parsedCommand.size() == 3) {
+                const std::string& key = parsedCommand[1];
+                int decrement = 0;
+
+                try {
+                    decrement = std::stoi(parsedCommand[2]);
+                } catch (...) {
+                    std::string response = encodeError("ERR value is not an integer or out of range");
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "DECRBY failed: decrement is not an integer\n";
+                    continue;
+                }
+
+                auto iterator = database.find(key);
+                int value = 0;
+
+                if (iterator != database.end()) {
+                    try {
+                        value = std::stoi(iterator->second);
+                    } catch (...) {
+                        std::string response = encodeError("ERR value is not an integer or out of range");
+                        if (!sendResponse(clientSocket, response)) {
+                            break;
+                        }
+
+                        std::cout << "DECRBY failed: value is not an integer\n";
+                        continue;
+                    }
+                }
+
+                value -= decrement;
+                database[key] = std::to_string(value);
+                std::string response = encodeInteger(value);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "DECRBY command handled successfully\n";
+
+            // Handle the EXISTS command
+            } else if (command == "EXISTS" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                int exists = database.find(key) != database.end();
+                std::string response = encodeInteger(exists);
+
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "EXISTS command handled successfully\n";
+
             // Handle unknown commands and incorrect arguments
             } else {
                 std::string response;
-                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL") {
+                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL" || command == "EXISTS" || command == "INCR" || command == "DECR" || command == "INCRBY" || command == "DECRBY") {
                     response = encodeError("ERR wrong number of arguments for command");
                 } else {
                     response = encodeError("ERR unknown command");
