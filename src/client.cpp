@@ -1,4 +1,5 @@
 #include <winsock2.h>
+#include <windows.h>
 #include <iostream>
 #include <cstring>
 
@@ -157,6 +158,219 @@ int main() {
     setBuffer[result] = '\0';
 
     std::cout << "SET response: " << setBuffer << "\n";
+
+    // Send EXPIRE command
+    const char* expireMessage = "*3\r\n$6\r\nEXPIRE\r\n$4\r\nname\r\n$1\r\n3\r\n";
+
+    result = send(
+        clientSocket,
+        expireMessage,
+        static_cast<int>(strlen(expireMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "EXPIRE send failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    std::cout << "EXPIRE command sent\n";
+
+    char expireBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        expireBuffer,
+        sizeof(expireBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "EXPIRE receive failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    expireBuffer[result] = '\0';
+
+    std::cout << "EXPIRE response: " << expireBuffer << "\n";
+
+    // Send TTL command
+    const char* ttlMessage = "*2\r\n$3\r\nTTL\r\n$4\r\nname\r\n";
+
+    result = send(
+        clientSocket,
+        ttlMessage,
+        static_cast<int>(strlen(ttlMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "TTL send failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    std::cout << "TTL command sent\n";
+
+    char ttlBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        ttlBuffer,
+        sizeof(ttlBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "TTL receive failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    ttlBuffer[result] = '\0';
+
+    std::cout << "TTL response: " << ttlBuffer << "\n";
+
+    // Wait for the key to expire
+    std::cout << "Waiting for key to expire...\n";
+
+    Sleep(4000);
+
+    // Check TTL after expiration
+    const char* expiredTtlMessage = "*2\r\n$3\r\nTTL\r\n$4\r\nname\r\n";
+
+    result = send(
+        clientSocket,
+        expiredTtlMessage,
+        static_cast<int>(strlen(expiredTtlMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Expired TTL send failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    std::cout << "Expired TTL command sent\n";
+
+    char expiredTtlBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        expiredTtlBuffer,
+        sizeof(expiredTtlBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Expired TTL receive failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    expiredTtlBuffer[result] = '\0';
+
+    std::cout << "Expired TTL response: " << expiredTtlBuffer << "\n";
+
+    // Check GET after expiration
+    const char* expiredGetMessage = "*2\r\n$3\r\nGET\r\n$4\r\nname\r\n";
+
+    result = send(
+        clientSocket,
+        expiredGetMessage,
+        static_cast<int>(strlen(expiredGetMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Expired GET send failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    std::cout << "Expired GET command sent\n";
+
+    char expiredGetBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        expiredGetBuffer,
+        sizeof(expiredGetBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Expired GET receive failed: " << WSAGetLastError() << "\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    expiredGetBuffer[result] = '\0';
+
+    std::cout << "Expired GET response: " << expiredGetBuffer << "\n";
 
     // Send INCR command
     const char* incrMessage = "*2\r\n$4\r\nINCR\r\n$7\r\ncounter\r\n";

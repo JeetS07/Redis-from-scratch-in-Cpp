@@ -5,10 +5,49 @@
 #include <unordered_map>
 #include <vector>
 #include <algorithm>
+#include <chrono>
 
 #pragma comment(lib, "ws2_32.lib")
 // Store Redis key-value pairs
 std::unordered_map<std::string, std::string> database;
+// Store expiration time for keys
+std::unordered_map<std::string, long long> expiration;
+
+// Check whether a key has expired
+bool isKeyExpired(const std::string& key) {
+    auto iterator = expiration.find(key);
+
+    if (iterator == expiration.end()) {
+        return false;
+    }
+
+    long long currentTime = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()
+    ).count();
+
+    if (currentTime >= iterator->second) {
+        database.erase(key);
+        expiration.erase(iterator);
+
+        return true;
+    }
+
+    return false;
+}
+
+// Check whether a command operates on a key
+bool commandUsesKey(const std::string& command) {
+    return command == "SET" ||
+           command == "GET" ||
+           command == "DEL" ||
+           command == "EXISTS" ||
+           command == "INCR" ||
+           command == "DECR" ||
+           command == "INCRBY" ||
+           command == "DECRBY" ||
+           command == "EXPIRE" ||
+           command == "TTL";
+}
 
 // Parse a RESP array command
 std::vector<std::string> parseRESP(const std::string& request) {
@@ -199,6 +238,11 @@ void handleClient(SOCKET clientSocket) {
 
             std::string command = parsedCommand[0];
             std::transform(command.begin(), command.end(), command.begin(), ::toupper);
+
+            // Check expiration before handling key-based commands
+            if (commandUsesKey(command) && parsedCommand.size() >= 2) {
+                isKeyExpired(parsedCommand[1]);
+            }
 
             // Handle the PING command
             if (command == "PING" && parsedCommand.size() == 1) {
@@ -415,6 +459,89 @@ void handleClient(SOCKET clientSocket) {
 
                 std::cout << "DECRBY command handled successfully\n";
 
+            // Handle the EXPIRE command
+            } else if (command == "EXPIRE" && parsedCommand.size() == 3) {
+                const std::string& key = parsedCommand[1];
+                int seconds = 0;
+
+                try {
+                    seconds = std::stoi(parsedCommand[2]);
+                } catch (...) {
+                    std::string response = encodeError("ERR value is not an integer or out of range");
+
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "EXPIRE failed: seconds is not an integer\n";
+                    continue;
+                }
+
+                auto iterator = database.find(key);
+                int result = 0;
+                if (iterator != database.end()) {
+                    long long currentTime = std::chrono::duration_cast<std::chrono::seconds>(
+                        std::chrono::system_clock::now().time_since_epoch()
+                    ).count();
+
+                    expiration[key] = currentTime + seconds;
+                    result = 1;
+                }
+                std::string response = encodeInteger(result);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "EXPIRE command handled successfully\n";
+
+            // Handle the TTL command
+            } else if (command == "TTL" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                auto databaseIterator = database.find(key);
+                if (databaseIterator == database.end()) {
+                    std::string response = encodeInteger(-2);
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "TTL command handled successfully\n";
+                    continue;
+                }
+
+                auto expirationIterator = expiration.find(key);
+                if (expirationIterator == expiration.end()) {
+                    std::string response = encodeInteger(-1);
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "TTL command handled successfully\n";
+                    continue;
+                }
+
+                long long currentTime = std::chrono::duration_cast<std::chrono::seconds>(
+                    std::chrono::system_clock::now().time_since_epoch()
+                ).count();
+
+                long long remainingTime = expirationIterator->second - currentTime;
+                if (remainingTime <= 0) {
+                    isKeyExpired(key);
+                    std::string response = encodeInteger(-2);
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "TTL command handled successfully\n";
+                    continue;
+                }
+
+                std::string response = encodeInteger(static_cast<int>(remainingTime));
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "TTL command handled successfully\n";
+
             // Handle the EXISTS command
             } else if (command == "EXISTS" && parsedCommand.size() == 2) {
                 const std::string& key = parsedCommand[1];
@@ -430,7 +557,7 @@ void handleClient(SOCKET clientSocket) {
             // Handle unknown commands and incorrect arguments
             } else {
                 std::string response;
-                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL" || command == "EXISTS" || command == "INCR" || command == "DECR" || command == "INCRBY" || command == "DECRBY") {
+                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL" || command == "EXISTS" || command == "INCR" || command == "DECR" || command == "INCRBY" || command == "DECRBY" || command == "EXPIRE" || command == "TTL") {
                     response = encodeError("ERR wrong number of arguments for command");
                 } else {
                     response = encodeError("ERR unknown command");
