@@ -38,6 +38,8 @@ bool isKeyExpired(const std::string& key) {
 // Check whether a command operates on a key
 bool commandUsesKey(const std::string& command) {
     return command == "SET" ||
+           command == "SETNX" ||
+           command == "APPEND" ||
            command == "GET" ||
            command == "DEL" ||
            command == "EXISTS" ||
@@ -172,6 +174,20 @@ std::string encodeInteger(int value) {
     return ":" + std::to_string(value) + "\r\n";
 }
 
+// Create a RESP array response
+std::string encodeArray(const std::vector<std::string>& values) {
+    std::string response = "*" + std::to_string(values.size()) + "\r\n";
+    for (const std::string& value : values) {
+        if (value == "__NULL__") {
+            response += encodeNullBulkString();
+        } else {
+            response += encodeBulkString(value);
+        }
+    }
+
+    return response;
+}
+
 // Send the complete response to the client
 bool sendResponse(SOCKET clientSocket, const std::string& response) {
     size_t totalSent = 0;
@@ -275,6 +291,55 @@ void handleClient(SOCKET clientSocket) {
 
                 std::cout << "SET command handled successfully\n";
 
+            // Handle the SETNX command
+            } else if (command == "SETNX" && parsedCommand.size() == 3) {
+                const std::string& key = parsedCommand[1];
+                const std::string& value = parsedCommand[2];
+                auto iterator = database.find(key);
+
+                int result = 0;
+                if (iterator == database.end()) {
+                    database[key] = value;
+                    result = 1;
+                }
+
+                std::string response = encodeInteger(result);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "SETNX command handled successfully\n";
+
+            // Handle the APPEND command
+            } else if (command == "APPEND" && parsedCommand.size() == 3) {
+                const std::string& key = parsedCommand[1];
+                const std::string& value = parsedCommand[2];
+                database[key] += value;
+
+                int newLength = static_cast<int>(database[key].size());
+
+                std::string response = encodeInteger(newLength);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "APPEND command handled successfully\n";
+                
+            // Handle the MSET command
+            } else if (command == "MSET" && parsedCommand.size() >= 3 && parsedCommand.size() % 2 == 1) {
+                for (size_t i = 1; i < parsedCommand.size(); i += 2) {
+                    const std::string& key = parsedCommand[i];
+                    const std::string& value = parsedCommand[i + 1];
+                    database[key] = value;
+                }
+
+                std::string response = encodeSimpleString("OK");
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "MSET command handled successfully\n";
+                
             // Handle the GET command
             } else if (command == "GET" && parsedCommand.size() == 2) {
                 const std::string& key = parsedCommand[1];
@@ -298,6 +363,28 @@ void handleClient(SOCKET clientSocket) {
 
                 std::cout << "GET command handled successfully\n";
             
+            // Handle the MGET command
+            } else if (command == "MGET" && parsedCommand.size() >= 2) {
+                std::vector<std::string> values;
+
+                for (size_t i = 1; i < parsedCommand.size(); i++) {
+                    const std::string& key = parsedCommand[i];
+                    isKeyExpired(key);
+                    auto iterator = database.find(key);
+                    if (iterator == database.end()) {
+                        values.push_back("__NULL__");
+                    } else {
+                        values.push_back(iterator->second);
+                    }
+                }
+
+                std::string response = encodeArray(values);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "MGET command handled successfully\n";
+
             // Handle the DEL command
             } else if (command == "DEL" && parsedCommand.size() == 2) {
                 const std::string& key = parsedCommand[1];
@@ -557,7 +644,7 @@ void handleClient(SOCKET clientSocket) {
             // Handle unknown commands and incorrect arguments
             } else {
                 std::string response;
-                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL" || command == "EXISTS" || command == "INCR" || command == "DECR" || command == "INCRBY" || command == "DECRBY" || command == "EXPIRE" || command == "TTL") {
+                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL" || command == "EXISTS" || command == "INCR" || command == "DECR" || command == "INCRBY" || command == "DECRBY" || command == "EXPIRE" || command == "TTL" || command == "MSET" || command == "MGET") {
                     response = encodeError("ERR wrong number of arguments for command");
                 } else {
                     response = encodeError("ERR unknown command");

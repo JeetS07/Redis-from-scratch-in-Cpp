@@ -11,6 +11,7 @@ int main() {
     WSADATA wsaData{};
 
     int result = WSAStartup(MAKEWORD(2, 2), &wsaData);
+
     if (result != 0) {
         std::cerr << "WSAStartup failed\n";
         return 1;
@@ -23,7 +24,6 @@ int main() {
 
     if (clientSocket == INVALID_SOCKET) {
         std::cerr << "Socket creation failed\n";
-
         WSACleanup();
         return 1;
     }
@@ -46,10 +46,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "Connection failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -67,10 +65,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "UNKNOWN send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -87,19 +83,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "UNKNOWN receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -119,10 +111,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "SET send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -139,7 +129,50 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "SET receive failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
 
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    setBuffer[result] = '\0';
+
+    std::cout << "SET response: " << setBuffer << "\n";
+
+    // Send SETNX command
+    const char* setnxMessage = "*3\r\n$5\r\nSETNX\r\n$8\r\nusername\r\n$4\r\nJeet\r\n";
+    result = send(
+        clientSocket,
+        setnxMessage,
+        static_cast<int>(strlen(setnxMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "SETNX send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "SETNX command sent\n";
+    char setnxBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        setnxBuffer,
+        sizeof(setnxBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "SETNX receive failed: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
 
@@ -148,16 +181,102 @@ int main() {
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
 
         return 1;
     }
 
-    setBuffer[result] = '\0';
+    setnxBuffer[result] = '\0';
+    std::cout << "SETNX response: " << setnxBuffer << "\n";
 
-    std::cout << "SET response: " << setBuffer << "\n";
+    // Send SETNX command again
+    const char* secondSetnxMessage = "*3\r\n$5\r\nSETNX\r\n$8\r\nusername\r\n$5\r\nRahul\r\n";
+    result = send(
+        clientSocket,
+        secondSetnxMessage,
+        static_cast<int>(strlen(secondSetnxMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Second SETNX send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    std::cout << "Second SETNX command sent\n";
+    char secondSetnxBuffer[1024]{};
+    result = recv(
+        clientSocket,
+        secondSetnxBuffer,
+        sizeof(secondSetnxBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Second SETNX receive failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    secondSetnxBuffer[result] = '\0';
+    std::cout << "Second SETNX response: " << secondSetnxBuffer << "\n";
+
+    // Send APPEND command
+    const char* appendMessage = "*3\r\n$6\r\nAPPEND\r\n$8\r\nusername\r\n$9\r\nSwarnakar\r\n";
+    result = send(
+        clientSocket,
+        appendMessage,
+        static_cast<int>(strlen(appendMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "APPEND send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "APPEND command sent\n";
+    char appendBuffer[1024]{};
+    result = recv(
+        clientSocket,
+        appendBuffer,
+        sizeof(appendBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "APPEND receive failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+        closesocket(clientSocket);
+        WSACleanup();
+
+        return 1;
+    }
+
+    appendBuffer[result] = '\0';
+    std::cout << "APPEND response: " << appendBuffer << "\n";
 
     // Send EXPIRE command
     const char* expireMessage = "*3\r\n$6\r\nEXPIRE\r\n$4\r\nname\r\n$1\r\n3\r\n";
@@ -171,10 +290,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "EXPIRE send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -191,19 +308,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "EXPIRE receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -223,10 +336,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "TTL send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -243,19 +354,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "TTL receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -280,10 +387,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "Expired TTL send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -300,19 +405,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "Expired TTL receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -332,10 +433,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "Expired GET send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -352,19 +451,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "Expired GET receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -384,10 +479,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "INCR send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -404,19 +497,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "INCR receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -434,10 +523,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "Second INCR send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -454,19 +541,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "Second INCR receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -476,6 +559,7 @@ int main() {
 
     // Send INCRBY command
     const char* incrByMessage = "*3\r\n$6\r\nINCRBY\r\n$7\r\ncounter\r\n$2\r\n10\r\n";
+
     result = send(
         clientSocket,
         incrByMessage,
@@ -487,12 +571,13 @@ int main() {
         std::cerr << "INCRBY send failed: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     std::cout << "INCRBY command sent\n";
+
     char incrByBuffer[1024]{};
+
     result = recv(
         clientSocket,
         incrByBuffer,
@@ -504,7 +589,6 @@ int main() {
         std::cerr << "INCRBY receive failed: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -512,14 +596,16 @@ int main() {
         std::cout << "Redis disconnected\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
+
     incrByBuffer[result] = '\0';
+
     std::cout << "INCRBY response: " << incrByBuffer << "\n";
 
     // Send DECRBY command
     const char* decrByMessage = "*3\r\n$6\r\nDECRBY\r\n$7\r\ncounter\r\n$1\r\n5\r\n";
+
     result = send(
         clientSocket,
         decrByMessage,
@@ -531,11 +617,11 @@ int main() {
         std::cerr << "DECRBY send failed: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     std::cout << "DECRBY command sent\n";
+
     char decrByBuffer[1024]{};
 
     result = recv(
@@ -549,7 +635,6 @@ int main() {
         std::cerr << "DECRBY receive failed: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -557,11 +642,11 @@ int main() {
         std::cout << "Redis disconnected\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     decrByBuffer[result] = '\0';
+
     std::cout << "DECRBY response: " << decrByBuffer << "\n";
 
     // Send DECR command
@@ -578,11 +663,11 @@ int main() {
         std::cerr << "DECR send failed: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     std::cout << "DECR command sent\n";
+
     char decrBuffer[1024]{};
 
     result = recv(
@@ -596,7 +681,6 @@ int main() {
         std::cerr << "DECR receive failed: " << WSAGetLastError() << "\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -604,11 +688,11 @@ int main() {
         std::cout << "Redis disconnected\n";
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     decrBuffer[result] = '\0';
+
     std::cout << "DECR response: " << decrBuffer << "\n";
 
     // Send DEL command
@@ -623,10 +707,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "DEL send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -643,19 +725,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "DEL receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -675,10 +753,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "EXISTS send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -695,19 +771,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "EXISTS receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -727,10 +799,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "GET send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -747,19 +817,15 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "GET receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -779,10 +845,8 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "PING send failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
@@ -799,25 +863,113 @@ int main() {
 
     if (result == SOCKET_ERROR) {
         std::cerr << "PING receive failed: " << WSAGetLastError() << "\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     if (result == 0) {
         std::cout << "Redis disconnected\n";
-
         closesocket(clientSocket);
         WSACleanup();
-
         return 1;
     }
 
     pingBuffer[result] = '\0';
 
     std::cout << "PING response: " << pingBuffer << "\n";
+
+    // Send MSET command
+    const char* msetMessage = "*5\r\n$4\r\nMSET\r\n$4\r\nname\r\n$4\r\nJeet\r\n$4\r\ncity\r\n$9\r\nBangalore\r\n";
+
+    result = send(
+        clientSocket,
+        msetMessage,
+        static_cast<int>(strlen(msetMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "MSET send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "MSET command sent\n";
+
+    char msetBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        msetBuffer,
+        sizeof(msetBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "MSET receive failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    msetBuffer[result] = '\0';
+
+    std::cout << "MSET response: " << msetBuffer << "\n";
+
+    // Send MGET command
+    const char* mgetMessage = "*4\r\n$4\r\nMGET\r\n$4\r\nname\r\n$4\r\ncity\r\n$7\r\nmissing\r\n";
+
+    result = send(
+        clientSocket,
+        mgetMessage,
+        static_cast<int>(strlen(mgetMessage)),
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "MGET send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "MGET command sent\n";
+
+    char mgetBuffer[1024]{};
+
+    result = recv(
+        clientSocket,
+        mgetBuffer,
+        sizeof(mgetBuffer) - 1,
+        0
+    );
+
+    if (result == SOCKET_ERROR) {
+        std::cerr << "MGET receive failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    if (result == 0) {
+        std::cout << "Redis disconnected\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    mgetBuffer[result] = '\0';
+
+    std::cout << "MGET response: " << mgetBuffer << "\n";
 
     // Cleanup
     closesocket(clientSocket);
