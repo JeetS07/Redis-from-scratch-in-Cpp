@@ -18,7 +18,6 @@ Release/
 .idea/
 
 # Visual Studio files
-.vscode/
 .vs/
 *.suo
 *.user
