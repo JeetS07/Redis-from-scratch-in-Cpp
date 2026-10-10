@@ -1,3 +1,6 @@
+#include <mutex>
+#include <thread>
+#include <atomic>
 #include <winsock2.h>
 #include <iostream>
 #include <cstring>
@@ -10,8 +13,13 @@
 #pragma comment(lib, "ws2_32.lib")
 // Store Redis key-value pairs
 std::unordered_map<std::string, std::string> database;
-// Store expiration time for keys
+// Store expiration time for keys in milliseconds
 std::unordered_map<std::string, long long> expiration;
+
+// Protect shared database and expiration maps
+std::mutex databaseMutex;
+// Control the active expiration worker
+std::atomic<bool> stopExpirationWorker{false};
 
 // Check whether a key has expired
 bool isKeyExpired(const std::string& key) {
@@ -21,7 +29,7 @@ bool isKeyExpired(const std::string& key) {
         return false;
     }
 
-    long long currentTime = std::chrono::duration_cast<std::chrono::seconds>(
+    long long currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()
     ).count();
 
@@ -35,11 +43,47 @@ bool isKeyExpired(const std::string& key) {
     return false;
 }
 
+// Delete a key and its expiration metadata
+bool deleteKey(const std::string& key) {
+    auto iterator = database.find(key);
+    if (iterator == database.end()) {
+        return false;
+    }
+
+    database.erase(iterator);
+    expiration.erase(key);
+
+    return true;
+}
+
+// Active expiration worker
+void activeExpirationWorker() {
+    while (!stopExpirationWorker) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        std::lock_guard<std::mutex> lock(databaseMutex);
+        auto currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::system_clock::now().time_since_epoch()
+        ).count();
+
+        auto iterator = expiration.begin();
+        while (iterator != expiration.end()) {
+            if (currentTime >= iterator->second) {
+                database.erase(iterator->first);
+                iterator = expiration.erase(iterator);
+            } else {
+                ++iterator;
+            }
+        }
+    }
+}
+
 // Check whether a command operates on a key
 bool commandUsesKey(const std::string& command) {
     return command == "SET" ||
            command == "SETNX" ||
            command == "APPEND" ||
+           command == "STRLEN" ||
+           command == "TYPE" ||
            command == "GET" ||
            command == "DEL" ||
            command == "EXISTS" ||
@@ -48,7 +92,9 @@ bool commandUsesKey(const std::string& command) {
            command == "INCRBY" ||
            command == "DECRBY" ||
            command == "EXPIRE" ||
-           command == "TTL";
+           command == "TTL" ||
+           command == "PTTL" ||
+           command == "PERSIST";
 }
 
 // Parse a RESP array command
@@ -251,6 +297,9 @@ void handleClient(SOCKET clientSocket) {
                 }
                 continue;
             }
+            
+            // Protect shared database during command execution
+            std::lock_guard<std::mutex> lock(databaseMutex);
 
             std::string command = parsedCommand[0];
             std::transform(command.begin(), command.end(), command.begin(), ::toupper);
@@ -284,6 +333,7 @@ void handleClient(SOCKET clientSocket) {
                 const std::string& value = parsedCommand[2];
 
                 database[key] = value;
+                expiration.erase(key);
                 std::string response = encodeSimpleString("OK");
                 if (!sendResponse(clientSocket, response)) {
                     break;
@@ -325,6 +375,39 @@ void handleClient(SOCKET clientSocket) {
 
                 std::cout << "APPEND command handled successfully\n";
                 
+            // Handle the STRLEN command
+            } else if (command == "STRLEN" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                auto iterator = database.find(key);
+                int length = 0;
+                if (iterator != database.end()) {
+                    length = static_cast<int>(iterator->second.size());
+                }
+
+                std::string response = encodeInteger(length);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "STRLEN command handled successfully\n";
+
+            // Handle the TYPE command
+            } else if (command == "TYPE" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                auto iterator = database.find(key);
+                std::string response;
+                if (iterator == database.end()) {
+                    response = encodeSimpleString("none");
+                } else {
+                    response = encodeSimpleString("string");
+                }
+
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "TYPE command handled successfully\n";
+
             // Handle the MSET command
             } else if (command == "MSET" && parsedCommand.size() >= 3 && parsedCommand.size() % 2 == 1) {
                 for (size_t i = 1; i < parsedCommand.size(); i += 2) {
@@ -388,14 +471,7 @@ void handleClient(SOCKET clientSocket) {
             // Handle the DEL command
             } else if (command == "DEL" && parsedCommand.size() == 2) {
                 const std::string& key = parsedCommand[1];
-                auto iterator = database.find(key);
-
-                int deletedCount = 0;
-                if (iterator != database.end()) {
-                    database.erase(iterator);
-                    deletedCount = 1;
-                }
-
+                int deletedCount = deleteKey(key) ? 1 : 0;
                 std::string response = encodeInteger(deletedCount);
                 if (!sendResponse(clientSocket, response)) {
                     break;
@@ -567,11 +643,11 @@ void handleClient(SOCKET clientSocket) {
                 auto iterator = database.find(key);
                 int result = 0;
                 if (iterator != database.end()) {
-                    long long currentTime = std::chrono::duration_cast<std::chrono::seconds>(
+                    long long currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                         std::chrono::system_clock::now().time_since_epoch()
                     ).count();
 
-                    expiration[key] = currentTime + seconds;
+                    expiration[key] = currentTime + (static_cast<long long>(seconds) * 1000);
                     result = 1;
                 }
                 std::string response = encodeInteger(result);
@@ -606,11 +682,12 @@ void handleClient(SOCKET clientSocket) {
                     continue;
                 }
 
-                long long currentTime = std::chrono::duration_cast<std::chrono::seconds>(
+                long long currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::system_clock::now().time_since_epoch()
                 ).count();
 
-                long long remainingTime = expirationIterator->second - currentTime;
+                long long remainingMilliseconds = expirationIterator->second - currentTime;
+                long long remainingTime = remainingMilliseconds / 1000;
                 if (remainingTime <= 0) {
                     isKeyExpired(key);
                     std::string response = encodeInteger(-2);
@@ -629,6 +706,75 @@ void handleClient(SOCKET clientSocket) {
 
                 std::cout << "TTL command handled successfully\n";
 
+            // Handle the PTTL command
+            } else if (command == "PTTL" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                auto databaseIterator = database.find(key);
+                if (databaseIterator == database.end()) {
+                    std::string response = encodeInteger(-2);
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "PTTL command handled successfully\n";
+                    continue;
+                }
+
+                auto expirationIterator = expiration.find(key);
+                if (expirationIterator == expiration.end()) {
+                    std::string response = encodeInteger(-1);
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "PTTL command handled successfully\n";
+                    continue;
+                }
+
+                long long currentTime = std::chrono::duration_cast<std::chrono::milliseconds>(
+                    std::chrono::system_clock::now().time_since_epoch()
+                ).count();
+
+                long long remainingTime = expirationIterator->second - currentTime;
+                if (remainingTime <= 0) {
+                    isKeyExpired(key);
+                    std::string response = encodeInteger(-2);
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+
+                    std::cout << "PTTL command handled successfully\n";
+                    continue;
+                }
+
+                std::string response = encodeInteger(remainingTime);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "PTTL command handled successfully\n";
+
+            // Handle the PERSIST command
+            } else if (command == "PERSIST" && parsedCommand.size() == 2) {
+                const std::string& key = parsedCommand[1];
+                auto iterator = database.find(key);
+                int result = 0;
+                if (iterator != database.end()) {
+                    auto expirationIterator = expiration.find(key);
+
+                    if (expirationIterator != expiration.end()) {
+                        expiration.erase(expirationIterator);
+                        result = 1;
+                    }
+                }
+
+                std::string response = encodeInteger(result);
+                if (!sendResponse(clientSocket, response)) {
+                    break;
+                }
+
+                std::cout << "PERSIST command handled successfully\n";
+
             // Handle the EXISTS command
             } else if (command == "EXISTS" && parsedCommand.size() == 2) {
                 const std::string& key = parsedCommand[1];
@@ -644,7 +790,7 @@ void handleClient(SOCKET clientSocket) {
             // Handle unknown commands and incorrect arguments
             } else {
                 std::string response;
-                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL" || command == "EXISTS" || command == "INCR" || command == "DECR" || command == "INCRBY" || command == "DECRBY" || command == "EXPIRE" || command == "TTL" || command == "MSET" || command == "MGET") {
+                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL" || command == "EXISTS" || command == "INCR" || command == "DECR" || command == "INCRBY" || command == "DECRBY" || command == "EXPIRE" || command == "TTL" || command == "PTTL" || command == "MSET" || command == "MGET" || command == "PERSIST") {
                     response = encodeError("ERR wrong number of arguments for command");
                 } else {
                     response = encodeError("ERR unknown command");
@@ -718,6 +864,9 @@ int main() {
 
     std::cout << "Server is listening...\n";
 
+    // Start active expiration worker
+    std::thread expirationThread(activeExpirationWorker);
+
     // Accept clients continuously
     while (true) {
         SOCKET clientSocket = accept(serverSocket, nullptr, nullptr);
@@ -732,9 +881,12 @@ int main() {
 
         // Receive data from the client
         handleClient(clientSocket);
-
         closesocket(clientSocket);
     }
+
+    // Stop active expiration worker
+    stopExpirationWorker = true;
+    expirationThread.join();
 
     // Cleanup
     closesocket(serverSocket);
