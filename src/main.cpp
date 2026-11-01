@@ -299,7 +299,7 @@ void handleClient(SOCKET clientSocket) {
             }
             
             // Protect shared database during command execution
-            std::lock_guard<std::mutex> lock(databaseMutex);
+            std::unique_lock<std::mutex> lock(databaseMutex);
 
             std::string command = parsedCommand[0];
             std::transform(command.begin(), command.end(), command.begin(), ::toupper);
@@ -312,6 +312,7 @@ void handleClient(SOCKET clientSocket) {
             // Handle the PING command
             if (command == "PING" && parsedCommand.size() == 1) {
                 std::string response = encodeSimpleString("PONG");
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -321,6 +322,7 @@ void handleClient(SOCKET clientSocket) {
             } else if (command == "ECHO" && parsedCommand.size() == 2) {
                 const std::string& argument = parsedCommand[1];
                 std::string response = encodeBulkString(argument);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -434,6 +436,9 @@ void handleClient(SOCKET clientSocket) {
                 } else {
                     response = encodeBulkString(iterator->second);
                 }
+                
+                // Release database lock before sending the response
+                lock.unlock();
 
                 if (!sendResponse(clientSocket, response)) {
                     break;
@@ -462,6 +467,7 @@ void handleClient(SOCKET clientSocket) {
                 }
 
                 std::string response = encodeArray(values);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -473,6 +479,7 @@ void handleClient(SOCKET clientSocket) {
                 const std::string& key = parsedCommand[1];
                 int deletedCount = deleteKey(key) ? 1 : 0;
                 std::string response = encodeInteger(deletedCount);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -879,9 +886,11 @@ int main() {
 
         std::cout << "Client connected successfully\n";
 
-        // Receive data from the client
-        handleClient(clientSocket);
-        closesocket(clientSocket);
+        // Handle each client in a separate thread
+        std::thread([clientSocket]() {
+            handleClient(clientSocket);
+            closesocket(clientSocket);
+        }).detach();
     }
 
     // Stop active expiration worker

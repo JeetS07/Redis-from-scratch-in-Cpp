@@ -1,7 +1,9 @@
+
 #include <winsock2.h>
 #include <windows.h>
 #include <iostream>
 #include <cstring>
+
 #pragma comment(lib, "ws2_32.lib")
 
 int main() {
@@ -42,43 +44,6 @@ int main() {
         return 1;
     }
     std::cout << "Connected to Redis successfully\n";
-
-    // Send UNKNOWN command
-    const char* unknownMessage = "*1\r\n$7\r\nUNKNOWN\r\n";
-    result = send(
-        clientSocket,
-        unknownMessage,
-        static_cast<int>(strlen(unknownMessage)),
-        0
-    );
-    if (result == SOCKET_ERROR) {
-        std::cerr << "UNKNOWN send failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    std::cout << "UNKNOWN command sent\n";
-    char unknownBuffer[1024]{};
-    result = recv(
-        clientSocket,
-        unknownBuffer,
-        sizeof(unknownBuffer) - 1,
-        0
-    );
-    if (result == SOCKET_ERROR) {
-        std::cerr << "UNKNOWN receive failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    if (result == 0) {
-        std::cout << "Redis disconnected\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    unknownBuffer[result] = '\0';
-    std::cout << "UNKNOWN response: " << unknownBuffer << "\n";
 
     // Send SET command
     const char* setMessage = "*3\r\n$3\r\nSET\r\n$4\r\nname\r\n$4\r\nJeet\r\n";
@@ -1032,7 +997,6 @@ int main() {
     mgetBuffer[result] = '\0';
     std::cout << "MGET response: " << mgetBuffer << "\n";
 
-    
     // Step 50: Test successful deletion of an existing key
     const char* deleteSetMessage = "*3\r\n$3\r\nSET\r\n$10\r\ndeleteTest\r\n$4\r\nJeet\r\n";
     result = send(clientSocket, deleteSetMessage, static_cast<int>(strlen(deleteSetMessage)), 0);
@@ -1196,6 +1160,72 @@ int main() {
     deleteTtlCheckBuffer[result] = '\0';
     std::cout << "TTL after DEL response: " << deleteTtlCheckBuffer << "\n";
 
+    // Step 51.6: Test active expiration without accessing the key
+    const char* activeExpireSetMessage = "*3\r\n$3\r\nSET\r\n$11\r\nactiveTest1\r\n$5\r\nhello\r\n";
+    result = send(clientSocket, activeExpireSetMessage, static_cast<int>(strlen(activeExpireSetMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Active expiration SET send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Active expiration SET command sent\n";
+    char activeExpireSetBuffer[1024]{};
+    result = recv(clientSocket, activeExpireSetBuffer, sizeof(activeExpireSetBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "Active expiration SET receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    activeExpireSetBuffer[result] = '\0';
+    std::cout << "Active expiration SET response: " << activeExpireSetBuffer << "\n";
+
+    // Set a 3-second expiration
+    const char* activeExpireMessage = "*3\r\n$6\r\nEXPIRE\r\n$11\r\nactiveTest1\r\n$1\r\n3\r\n";
+    result = send(clientSocket, activeExpireMessage, static_cast<int>(strlen(activeExpireMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Active expiration EXPIRE send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Active expiration EXPIRE command sent\n";
+    char activeExpireBuffer[1024]{};
+    result = recv(clientSocket, activeExpireBuffer, sizeof(activeExpireBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "Active expiration EXPIRE receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    activeExpireBuffer[result] = '\0';
+    std::cout << "Active expiration EXPIRE response: " << activeExpireBuffer << "\n";
+
+    // Wait without accessing activeTest1
+    std::cout << "Waiting 5 seconds without accessing activeTest1...\n";
+    Sleep(5000);
+
+    // Check GET after the background worker has had time to remove the key
+    const char* activeExpireGetMessage = "*2\r\n$3\r\nGET\r\n$11\r\nactiveTest1\r\n";
+    result = send(clientSocket, activeExpireGetMessage, static_cast<int>(strlen(activeExpireGetMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Active expiration GET send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "Active expiration GET command sent\n";
+    char activeExpireGetBuffer[1024]{};
+    result = recv(clientSocket, activeExpireGetBuffer, sizeof(activeExpireGetBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "Active expiration GET receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    activeExpireGetBuffer[result] = '\0';
+    std::cout << "Active expiration GET response: " << activeExpireGetBuffer << "\n";
 
     // Cleanup
     closesocket(clientSocket);
