@@ -337,6 +337,7 @@ void handleClient(SOCKET clientSocket) {
                 database[key] = value;
                 expiration.erase(key);
                 std::string response = encodeSimpleString("OK");
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -356,6 +357,7 @@ void handleClient(SOCKET clientSocket) {
                 }
 
                 std::string response = encodeInteger(result);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -371,6 +373,7 @@ void handleClient(SOCKET clientSocket) {
                 int newLength = static_cast<int>(database[key].size());
 
                 std::string response = encodeInteger(newLength);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -387,6 +390,7 @@ void handleClient(SOCKET clientSocket) {
                 }
 
                 std::string response = encodeInteger(length);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -403,7 +407,8 @@ void handleClient(SOCKET clientSocket) {
                 } else {
                     response = encodeSimpleString("string");
                 }
-
+                lock.unlock();
+                
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -416,9 +421,11 @@ void handleClient(SOCKET clientSocket) {
                     const std::string& key = parsedCommand[i];
                     const std::string& value = parsedCommand[i + 1];
                     database[key] = value;
+                    expiration.erase(key);
                 }
 
                 std::string response = encodeSimpleString("OK");
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -787,7 +794,7 @@ void handleClient(SOCKET clientSocket) {
                 const std::string& key = parsedCommand[1];
                 int exists = database.find(key) != database.end();
                 std::string response = encodeInteger(exists);
-
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }

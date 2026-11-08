@@ -1,11 +1,8 @@
-
 #include <winsock2.h>
 #include <windows.h>
 #include <iostream>
 #include <cstring>
-
 #pragma comment(lib, "ws2_32.lib")
-
 int main() {
     // Initialize Winsock
     WSADATA wsaData{};
@@ -15,7 +12,6 @@ int main() {
         return 1;
     }
     std::cout << "Winsock initialized\n";
-
     // Create a TCP socket
     SOCKET clientSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (clientSocket == INVALID_SOCKET) {
@@ -24,13 +20,11 @@ int main() {
         return 1;
     }
     std::cout << "Socket created successfully\n";
-
     // Configure server address
     sockaddr_in serverAddress{};
     serverAddress.sin_family = AF_INET;
     serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
     serverAddress.sin_port = htons(6379);
-
     // Connect to the server
     result = connect(
         clientSocket,
@@ -44,7 +38,6 @@ int main() {
         return 1;
     }
     std::cout << "Connected to Redis successfully\n";
-
     // Send SET command
     const char* setMessage = "*3\r\n$3\r\nSET\r\n$4\r\nname\r\n$4\r\nJeet\r\n";
     result = send(
@@ -81,7 +74,6 @@ int main() {
     }
     setBuffer[result] = '\0';
     std::cout << "SET response: " << setBuffer << "\n";
-
     // Send SETNX command
     const char* setnxMessage = "*3\r\n$5\r\nSETNX\r\n$8\r\nusername\r\n$4\r\nJeet\r\n";
     result = send(
@@ -118,7 +110,6 @@ int main() {
     }
     setnxBuffer[result] = '\0';
     std::cout << "SETNX response: " << setnxBuffer << "\n";
-
     // Send SETNX command again
     const char* secondSetnxMessage = "*3\r\n$5\r\nSETNX\r\n$8\r\nusername\r\n$5\r\nRahul\r\n";
     result = send(
@@ -155,7 +146,6 @@ int main() {
     }
     secondSetnxBuffer[result] = '\0';
     std::cout << "Second SETNX response: " << secondSetnxBuffer << "\n";
-
     // Send APPEND command
     const char* appendMessage = "*3\r\n$6\r\nAPPEND\r\n$8\r\nusername\r\n$9\r\nSwarnakar\r\n";
     result = send(
@@ -192,7 +182,6 @@ int main() {
     }
     appendBuffer[result] = '\0';
     std::cout << "APPEND response: " << appendBuffer << "\n";
-
     // Send STRLEN command
     const char* strlenMessage = "*2\r\n$6\r\nSTRLEN\r\n$8\r\nusername\r\n";
     result = send(
@@ -229,7 +218,46 @@ int main() {
     }
     strlenBuffer[result] = '\0';
     std::cout << "STRLEN response: " << strlenBuffer << "\n";
-
+    // Send TYPE command for an existing key
+    const char* typeMessage = "*2\r\n$4\r\nTYPE\r\n$4\r\nname\r\n";
+    result = send(clientSocket, typeMessage, static_cast<int>(strlen(typeMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "TYPE send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "TYPE existing key command sent\n";
+    char typeBuffer[1024]{};
+    result = recv(clientSocket, typeBuffer, sizeof(typeBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "TYPE existing key receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    typeBuffer[result] = '\0';
+    std::cout << "TYPE existing key response: " << typeBuffer << "\n";
+    // Send TYPE command for a missing key
+    const char* missingTypeMessage = "*2\r\n$4\r\nTYPE\r\n$10\r\nmissingKey\r\n";
+    result = send(clientSocket, missingTypeMessage, static_cast<int>(strlen(missingTypeMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "TYPE missing key send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "TYPE missing key command sent\n";
+    char missingTypeBuffer[1024]{};
+    result = recv(clientSocket, missingTypeBuffer, sizeof(missingTypeBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "TYPE missing key receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    missingTypeBuffer[result] = '\0';
+    std::cout << "TYPE missing key response: " << missingTypeBuffer << "\n";
     // Send EXPIRE command
     const char* expireMessage = "*3\r\n$6\r\nEXPIRE\r\n$4\r\nname\r\n$1\r\n3\r\n";
     result = send(
@@ -266,7 +294,6 @@ int main() {
     }
     expireBuffer[result] = '\0';
     std::cout << "EXPIRE response: " << expireBuffer << "\n";
-
     // Send TTL command
     const char* ttlMessage = "*2\r\n$3\r\nTTL\r\n$4\r\nname\r\n";
     result = send(
@@ -303,7 +330,6 @@ int main() {
     }
     ttlBuffer[result] = '\0';
     std::cout << "TTL response: " << ttlBuffer << "\n";
-
     // Send PTTL command
     const char* pttlMessage = "*2\r\n$4\r\nPTTL\r\n$4\r\nname\r\n";
     result = send(
@@ -340,7 +366,6 @@ int main() {
     }
     pttlBuffer[result] = '\0';
     std::cout << "PTTL response: " << pttlBuffer << "\n";
-
     // Send PERSIST test SET command
     const char* persistSetMessage = "*3\r\n$3\r\nSET\r\n$7\r\npersist\r\n$4\r\nJeet\r\n";
     result = send(clientSocket, persistSetMessage, static_cast<int>(strlen(persistSetMessage)), 0);
@@ -367,7 +392,6 @@ int main() {
     }
     persistSetBuffer[result] = '\0';
     std::cout << "PERSIST test SET response: " << persistSetBuffer << "\n";
-
     // Send EXPIRE command for PERSIST test
     const char* persistExpireMessage = "*3\r\n$6\r\nEXPIRE\r\n$7\r\npersist\r\n$1\r\n3\r\n";
     result = send(clientSocket, persistExpireMessage, static_cast<int>(strlen(persistExpireMessage)), 0);
@@ -394,7 +418,6 @@ int main() {
     }
     persistExpireBuffer[result] = '\0';
     std::cout << "PERSIST test EXPIRE response: " << persistExpireBuffer << "\n";
-
     // Send PERSIST command
     const char* persistMessage = "*2\r\n$7\r\nPERSIST\r\n$7\r\npersist\r\n";
     result = send(clientSocket, persistMessage, static_cast<int>(strlen(persistMessage)), 0);
@@ -421,7 +444,6 @@ int main() {
     }
     persistBuffer[result] = '\0';
     std::cout << "PERSIST response: " << persistBuffer << "\n";
-
     // Check TTL after PERSIST
     const char* persistTtlMessage = "*2\r\n$3\r\nTTL\r\n$7\r\npersist\r\n";
     result = send(clientSocket, persistTtlMessage, static_cast<int>(strlen(persistTtlMessage)), 0);
@@ -448,11 +470,9 @@ int main() {
     }
     persistTtlBuffer[result] = '\0';
     std::cout << "PERSIST TTL response: " << persistTtlBuffer << "\n";
-
     // Wait for the key to expire
     std::cout << "Waiting for key to expire...\n";
     Sleep(4000);
-
     // Check TTL after expiration
     const char* expiredTtlMessage = "*2\r\n$3\r\nTTL\r\n$4\r\nname\r\n";
     result = send(
@@ -489,7 +509,6 @@ int main() {
     }
     expiredTtlBuffer[result] = '\0';
     std::cout << "Expired TTL response: " << expiredTtlBuffer << "\n";
-
     // Send expired PTTL command
     const char* expiredPttlMessage = "*2\r\n$4\r\nPTTL\r\n$4\r\nname\r\n";
     result = send(
@@ -526,7 +545,6 @@ int main() {
     }
     expiredPttlBuffer[result] = '\0';
     std::cout << "Expired PTTL response: " << expiredPttlBuffer << "\n";
-
     // Check GET after expiration
     const char* expiredGetMessage = "*2\r\n$3\r\nGET\r\n$4\r\nname\r\n";
     result = send(
@@ -563,7 +581,6 @@ int main() {
     }
     expiredGetBuffer[result] = '\0';
     std::cout << "Expired GET response: " << expiredGetBuffer << "\n";
-
     // Check PERSIST key after the original expiration time
     const char* persistGetMessage = "*2\r\n$3\r\nGET\r\n$7\r\npersist\r\n";
     result = send(clientSocket, persistGetMessage, static_cast<int>(strlen(persistGetMessage)), 0);
@@ -590,7 +607,6 @@ int main() {
     }
     persistGetBuffer[result] = '\0';
     std::cout << "PERSIST GET response: " << persistGetBuffer << "\n";
-
     // Send INCR command
     const char* incrMessage = "*2\r\n$4\r\nINCR\r\n$7\r\ncounter\r\n";
     result = send(
@@ -627,7 +643,6 @@ int main() {
     }
     incrBuffer[result] = '\0';
     std::cout << "INCR response: " << incrBuffer << "\n";
-
     // Send INCR command again
     result = send(
         clientSocket,
@@ -663,7 +678,6 @@ int main() {
     }
     secondIncrBuffer[result] = '\0';
     std::cout << "Second INCR response: " << secondIncrBuffer << "\n";
-
     // Send INCRBY command
     const char* incrByMessage = "*3\r\n$6\r\nINCRBY\r\n$7\r\ncounter\r\n$2\r\n10\r\n";
     result = send(
@@ -700,7 +714,6 @@ int main() {
     }
     incrByBuffer[result] = '\0';
     std::cout << "INCRBY response: " << incrByBuffer << "\n";
-
     // Send DECRBY command
     const char* decrByMessage = "*3\r\n$6\r\nDECRBY\r\n$7\r\ncounter\r\n$1\r\n5\r\n";
     result = send(
@@ -737,7 +750,6 @@ int main() {
     }
     decrByBuffer[result] = '\0';
     std::cout << "DECRBY response: " << decrByBuffer << "\n";
-
     // Send DECR command
     const char* decrMessage = "*2\r\n$4\r\nDECR\r\n$7\r\ncounter\r\n";
     result = send(
@@ -774,7 +786,6 @@ int main() {
     }
     decrBuffer[result] = '\0';
     std::cout << "DECR response: " << decrBuffer << "\n";
-
     // Send DEL command
     const char* delMessage = "*2\r\n$3\r\nDEL\r\n$4\r\nname\r\n";
     result = send(
@@ -811,7 +822,6 @@ int main() {
     }
     delBuffer[result] = '\0';
     std::cout << "DEL response: " << delBuffer << "\n";
-
     // Send EXISTS command
     const char* existsMessage = "*2\r\n$6\r\nEXISTS\r\n$4\r\nname\r\n";
     result = send(
@@ -848,7 +858,6 @@ int main() {
     }
     existsBuffer[result] = '\0';
     std::cout << "EXISTS response: " << existsBuffer << "\n";
-
     // Send GET command
     const char* getMessage = "*2\r\n$3\r\nGET\r\n$4\r\nname\r\n";
     result = send(
@@ -885,7 +894,6 @@ int main() {
     }
     getBuffer[result] = '\0';
     std::cout << "GET response: " << getBuffer << "\n";
-
     // Send PING command
     const char* pingMessage = "*1\r\n$4\r\nPING\r\n";
     result = send(
@@ -922,7 +930,6 @@ int main() {
     }
     pingBuffer[result] = '\0';
     std::cout << "PING response: " << pingBuffer << "\n";
-
     // Send MSET command
     const char* msetMessage = "*5\r\n$4\r\nMSET\r\n$4\r\nname\r\n$4\r\nJeet\r\n$4\r\ncity\r\n$9\r\nBangalore\r\n";
     result = send(
@@ -959,7 +966,102 @@ int main() {
     }
     msetBuffer[result] = '\0';
     std::cout << "MSET response: " << msetBuffer << "\n";
-
+    // Verify MSET removes an existing key expiration
+    const char* ttlMsetSetMessage = "*3\r\n$3\r\nSET\r\n$7\r\nttlMset\r\n$8\r\noldValue\r\n";
+    result = send(clientSocket, ttlMsetSetMessage, static_cast<int>(strlen(ttlMsetSetMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "TTL MSET test SET send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "TTL MSET test SET command sent\n";
+    char ttlMsetSetBuffer[1024]{};
+    result = recv(clientSocket, ttlMsetSetBuffer, sizeof(ttlMsetSetBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "TTL MSET test SET receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    ttlMsetSetBuffer[result] = '\0';
+    std::cout << "TTL MSET test SET response: " << ttlMsetSetBuffer << "\n";
+    const char* ttlMsetExpireMessage = "*3\r\n$6\r\nEXPIRE\r\n$7\r\nttlMset\r\n$2\r\n60\r\n";
+    result = send(clientSocket, ttlMsetExpireMessage, static_cast<int>(strlen(ttlMsetExpireMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "TTL MSET test EXPIRE send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "TTL MSET test EXPIRE command sent\n";
+    char ttlMsetExpireBuffer[1024]{};
+    result = recv(clientSocket, ttlMsetExpireBuffer, sizeof(ttlMsetExpireBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "TTL MSET test EXPIRE receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    ttlMsetExpireBuffer[result] = '\0';
+    std::cout << "TTL MSET test EXPIRE response: " << ttlMsetExpireBuffer << "\n";
+    const char* ttlMsetMessage = "*3\r\n$4\r\nMSET\r\n$7\r\nttlMset\r\n$8\r\nnewValue\r\n";
+    result = send(clientSocket, ttlMsetMessage, static_cast<int>(strlen(ttlMsetMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "TTL MSET test MSET send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "TTL MSET test MSET command sent\n";
+    char ttlMsetBuffer[1024]{};
+    result = recv(clientSocket, ttlMsetBuffer, sizeof(ttlMsetBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "TTL MSET test MSET receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    ttlMsetBuffer[result] = '\0';
+    std::cout << "TTL MSET test MSET response: " << ttlMsetBuffer << "\n";
+    const char* ttlMsetCheckMessage = "*2\r\n$3\r\nTTL\r\n$7\r\nttlMset\r\n";
+    result = send(clientSocket, ttlMsetCheckMessage, static_cast<int>(strlen(ttlMsetCheckMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "TTL after MSET send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "TTL after MSET command sent\n";
+    char ttlMsetCheckBuffer[1024]{};
+    result = recv(clientSocket, ttlMsetCheckBuffer, sizeof(ttlMsetCheckBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "TTL after MSET receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    ttlMsetCheckBuffer[result] = '\0';
+    std::cout << "TTL after MSET response: " << ttlMsetCheckBuffer << "\n";
+    const char* ttlMsetGetMessage = "*2\r\n$3\r\nGET\r\n$7\r\nttlMset\r\n";
+    result = send(clientSocket, ttlMsetGetMessage, static_cast<int>(strlen(ttlMsetGetMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "GET after MSET send failed: " << WSAGetLastError() << "\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    std::cout << "GET after MSET command sent\n";
+    char ttlMsetGetBuffer[1024]{};
+    result = recv(clientSocket, ttlMsetGetBuffer, sizeof(ttlMsetGetBuffer) - 1, 0);
+    if (result == SOCKET_ERROR || result == 0) {
+        std::cerr << "GET after MSET receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+    ttlMsetGetBuffer[result] = '\0';
+    std::cout << "GET after MSET response: " << ttlMsetGetBuffer << "\n";
     // Send MGET command
     const char* mgetMessage = "*4\r\n$4\r\nMGET\r\n$4\r\nname\r\n$4\r\ncity\r\n$7\r\nmissing\r\n";
     result = send(
@@ -996,7 +1098,6 @@ int main() {
     }
     mgetBuffer[result] = '\0';
     std::cout << "MGET response: " << mgetBuffer << "\n";
-
     // Step 50: Test successful deletion of an existing key
     const char* deleteSetMessage = "*3\r\n$3\r\nSET\r\n$10\r\ndeleteTest\r\n$4\r\nJeet\r\n";
     result = send(clientSocket, deleteSetMessage, static_cast<int>(strlen(deleteSetMessage)), 0);
@@ -1017,7 +1118,6 @@ int main() {
     }
     deleteSetBuffer[result] = '\0';
     std::cout << "SET deleteTest response: " << deleteSetBuffer << "\n";
-
     // Step 50: Delete the existing key
     const char* deleteMessage = "*2\r\n$3\r\nDEL\r\n$10\r\ndeleteTest\r\n";
     result = send(clientSocket, deleteMessage, static_cast<int>(strlen(deleteMessage)), 0);
@@ -1038,7 +1138,6 @@ int main() {
     }
     deleteBuffer[result] = '\0';
     std::cout << "First DEL response: " << deleteBuffer << "\n";
-
     // Step 50: Verify deleting the same key again
     result = send(clientSocket, deleteMessage, static_cast<int>(strlen(deleteMessage)), 0);
     if (result == SOCKET_ERROR) {
@@ -1058,7 +1157,6 @@ int main() {
     }
     secondDeleteBuffer[result] = '\0';
     std::cout << "Second DEL response: " << secondDeleteBuffer << "\n";
-
     // Step 50: Verify the deleted key has no remaining value
     const char* deleteGetMessage = "*2\r\n$3\r\nGET\r\n$10\r\ndeleteTest\r\n";
     result = send(clientSocket, deleteGetMessage, static_cast<int>(strlen(deleteGetMessage)), 0);
@@ -1079,7 +1177,6 @@ int main() {
     }
     deleteGetBuffer[result] = '\0';
     std::cout << "GET after DEL response: " << deleteGetBuffer << "\n";
-
     // Verify deleting a key also removes its expiration metadata
     const char* deleteExpireSetMessage = "*3\r\n$3\r\nSET\r\n$10\r\ndeleteTest\r\n$4\r\nJeet\r\n";
     result = send(clientSocket, deleteExpireSetMessage, static_cast<int>(strlen(deleteExpireSetMessage)), 0);
@@ -1100,7 +1197,6 @@ int main() {
     }
     deleteExpireSetBuffer[result] = '\0';
     std::cout << "TTL test SET response: " << deleteExpireSetBuffer << "\n";
-
     const char* deleteExpireMessage = "*3\r\n$6\r\nEXPIRE\r\n$10\r\ndeleteTest\r\n$2\r\n10\r\n";
     result = send(clientSocket, deleteExpireMessage, static_cast<int>(strlen(deleteExpireMessage)), 0);
     if (result == SOCKET_ERROR) {
@@ -1120,7 +1216,6 @@ int main() {
     }
     deleteExpireBuffer[result] = '\0';
     std::cout << "EXPIRE test response: " << deleteExpireBuffer << "\n";
-
     result = send(clientSocket, deleteMessage, static_cast<int>(strlen(deleteMessage)), 0);
     if (result == SOCKET_ERROR) {
         std::cerr << "DEL with TTL send failed: " << WSAGetLastError() << "\n";
@@ -1139,7 +1234,6 @@ int main() {
     }
     deleteTtlBuffer[result] = '\0';
     std::cout << "DEL with TTL response: " << deleteTtlBuffer << "\n";
-
     const char* deleteTtlCheckMessage = "*2\r\n$3\r\nTTL\r\n$10\r\ndeleteTest\r\n";
     result = send(clientSocket, deleteTtlCheckMessage, static_cast<int>(strlen(deleteTtlCheckMessage)), 0);
     if (result == SOCKET_ERROR) {
@@ -1159,7 +1253,6 @@ int main() {
     }
     deleteTtlCheckBuffer[result] = '\0';
     std::cout << "TTL after DEL response: " << deleteTtlCheckBuffer << "\n";
-
     // Step 51.6: Test active expiration without accessing the key
     const char* activeExpireSetMessage = "*3\r\n$3\r\nSET\r\n$11\r\nactiveTest1\r\n$5\r\nhello\r\n";
     result = send(clientSocket, activeExpireSetMessage, static_cast<int>(strlen(activeExpireSetMessage)), 0);
@@ -1180,7 +1273,6 @@ int main() {
     }
     activeExpireSetBuffer[result] = '\0';
     std::cout << "Active expiration SET response: " << activeExpireSetBuffer << "\n";
-
     // Set a 3-second expiration
     const char* activeExpireMessage = "*3\r\n$6\r\nEXPIRE\r\n$11\r\nactiveTest1\r\n$1\r\n3\r\n";
     result = send(clientSocket, activeExpireMessage, static_cast<int>(strlen(activeExpireMessage)), 0);
@@ -1201,11 +1293,9 @@ int main() {
     }
     activeExpireBuffer[result] = '\0';
     std::cout << "Active expiration EXPIRE response: " << activeExpireBuffer << "\n";
-
     // Wait without accessing activeTest1
     std::cout << "Waiting 5 seconds without accessing activeTest1...\n";
     Sleep(5000);
-
     // Check GET after the background worker has had time to remove the key
     const char* activeExpireGetMessage = "*2\r\n$3\r\nGET\r\n$11\r\nactiveTest1\r\n";
     result = send(clientSocket, activeExpireGetMessage, static_cast<int>(strlen(activeExpireGetMessage)), 0);
@@ -1226,7 +1316,6 @@ int main() {
     }
     activeExpireGetBuffer[result] = '\0';
     std::cout << "Active expiration GET response: " << activeExpireGetBuffer << "\n";
-
     // Cleanup
     closesocket(clientSocket);
     WSACleanup();
