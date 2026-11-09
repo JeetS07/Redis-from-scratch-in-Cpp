@@ -504,6 +504,7 @@ void handleClient(SOCKET clientSocket) {
                         value = std::stoi(iterator->second);
                     } catch (...) {
                         std::string response = encodeError("ERR value is not an integer or out of range");
+                        lock.unlock();
                         if (!sendResponse(clientSocket, response)) {
                             break;
                         }
@@ -516,6 +517,7 @@ void handleClient(SOCKET clientSocket) {
                 value++;
                 database[key] = std::to_string(value);
                 std::string response = encodeInteger(value);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -533,7 +535,7 @@ void handleClient(SOCKET clientSocket) {
                         value = std::stoi(iterator->second);
                     } catch (...) {
                         std::string response = encodeError("ERR value is not an integer or out of range");
-
+                        lock.unlock();
                         if (!sendResponse(clientSocket, response)) {
                             break;
                         }
@@ -546,6 +548,7 @@ void handleClient(SOCKET clientSocket) {
                 value--;
                 database[key] = std::to_string(value);
                 std::string response = encodeInteger(value);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -560,6 +563,7 @@ void handleClient(SOCKET clientSocket) {
                     increment = std::stoi(parsedCommand[2]);
                 } catch (...) {
                     std::string response = encodeError("ERR value is not an integer or out of range");
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -575,6 +579,7 @@ void handleClient(SOCKET clientSocket) {
                         value = std::stoi(iterator->second);
                     } catch (...) {
                         std::string response = encodeError("ERR value is not an integer or out of range");
+                        lock.unlock();
                         if (!sendResponse(clientSocket, response)) {
                             break;
                         }
@@ -587,6 +592,7 @@ void handleClient(SOCKET clientSocket) {
                 value += increment;
                 database[key] = std::to_string(value);
                 std::string response = encodeInteger(value);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -602,6 +608,7 @@ void handleClient(SOCKET clientSocket) {
                     decrement = std::stoi(parsedCommand[2]);
                 } catch (...) {
                     std::string response = encodeError("ERR value is not an integer or out of range");
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -618,6 +625,7 @@ void handleClient(SOCKET clientSocket) {
                         value = std::stoi(iterator->second);
                     } catch (...) {
                         std::string response = encodeError("ERR value is not an integer or out of range");
+                        lock.unlock();
                         if (!sendResponse(clientSocket, response)) {
                             break;
                         }
@@ -630,6 +638,7 @@ void handleClient(SOCKET clientSocket) {
                 value -= decrement;
                 database[key] = std::to_string(value);
                 std::string response = encodeInteger(value);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }

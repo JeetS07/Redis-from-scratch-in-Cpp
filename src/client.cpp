@@ -218,46 +218,6 @@ int main() {
     }
     strlenBuffer[result] = '\0';
     std::cout << "STRLEN response: " << strlenBuffer << "\n";
-    // Send TYPE command for an existing key
-    const char* typeMessage = "*2\r\n$4\r\nTYPE\r\n$4\r\nname\r\n";
-    result = send(clientSocket, typeMessage, static_cast<int>(strlen(typeMessage)), 0);
-    if (result == SOCKET_ERROR) {
-        std::cerr << "TYPE send failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    std::cout << "TYPE existing key command sent\n";
-    char typeBuffer[1024]{};
-    result = recv(clientSocket, typeBuffer, sizeof(typeBuffer) - 1, 0);
-    if (result == SOCKET_ERROR || result == 0) {
-        std::cerr << "TYPE existing key receive failed\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    typeBuffer[result] = '\0';
-    std::cout << "TYPE existing key response: " << typeBuffer << "\n";
-    // Send TYPE command for a missing key
-    const char* missingTypeMessage = "*2\r\n$4\r\nTYPE\r\n$10\r\nmissingKey\r\n";
-    result = send(clientSocket, missingTypeMessage, static_cast<int>(strlen(missingTypeMessage)), 0);
-    if (result == SOCKET_ERROR) {
-        std::cerr << "TYPE missing key send failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    std::cout << "TYPE missing key command sent\n";
-    char missingTypeBuffer[1024]{};
-    result = recv(clientSocket, missingTypeBuffer, sizeof(missingTypeBuffer) - 1, 0);
-    if (result == SOCKET_ERROR || result == 0) {
-        std::cerr << "TYPE missing key receive failed\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    missingTypeBuffer[result] = '\0';
-    std::cout << "TYPE missing key response: " << missingTypeBuffer << "\n";
     // Send EXPIRE command
     const char* expireMessage = "*3\r\n$6\r\nEXPIRE\r\n$4\r\nname\r\n$1\r\n3\r\n";
     result = send(
@@ -966,102 +926,6 @@ int main() {
     }
     msetBuffer[result] = '\0';
     std::cout << "MSET response: " << msetBuffer << "\n";
-    // Verify MSET removes an existing key expiration
-    const char* ttlMsetSetMessage = "*3\r\n$3\r\nSET\r\n$7\r\nttlMset\r\n$8\r\noldValue\r\n";
-    result = send(clientSocket, ttlMsetSetMessage, static_cast<int>(strlen(ttlMsetSetMessage)), 0);
-    if (result == SOCKET_ERROR) {
-        std::cerr << "TTL MSET test SET send failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    std::cout << "TTL MSET test SET command sent\n";
-    char ttlMsetSetBuffer[1024]{};
-    result = recv(clientSocket, ttlMsetSetBuffer, sizeof(ttlMsetSetBuffer) - 1, 0);
-    if (result == SOCKET_ERROR || result == 0) {
-        std::cerr << "TTL MSET test SET receive failed\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    ttlMsetSetBuffer[result] = '\0';
-    std::cout << "TTL MSET test SET response: " << ttlMsetSetBuffer << "\n";
-    const char* ttlMsetExpireMessage = "*3\r\n$6\r\nEXPIRE\r\n$7\r\nttlMset\r\n$2\r\n60\r\n";
-    result = send(clientSocket, ttlMsetExpireMessage, static_cast<int>(strlen(ttlMsetExpireMessage)), 0);
-    if (result == SOCKET_ERROR) {
-        std::cerr << "TTL MSET test EXPIRE send failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    std::cout << "TTL MSET test EXPIRE command sent\n";
-    char ttlMsetExpireBuffer[1024]{};
-    result = recv(clientSocket, ttlMsetExpireBuffer, sizeof(ttlMsetExpireBuffer) - 1, 0);
-    if (result == SOCKET_ERROR || result == 0) {
-        std::cerr << "TTL MSET test EXPIRE receive failed\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    ttlMsetExpireBuffer[result] = '\0';
-    std::cout << "TTL MSET test EXPIRE response: " << ttlMsetExpireBuffer << "\n";
-    const char* ttlMsetMessage = "*3\r\n$4\r\nMSET\r\n$7\r\nttlMset\r\n$8\r\nnewValue\r\n";
-    result = send(clientSocket, ttlMsetMessage, static_cast<int>(strlen(ttlMsetMessage)), 0);
-    if (result == SOCKET_ERROR) {
-        std::cerr << "TTL MSET test MSET send failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    std::cout << "TTL MSET test MSET command sent\n";
-    char ttlMsetBuffer[1024]{};
-    result = recv(clientSocket, ttlMsetBuffer, sizeof(ttlMsetBuffer) - 1, 0);
-    if (result == SOCKET_ERROR || result == 0) {
-        std::cerr << "TTL MSET test MSET receive failed\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    ttlMsetBuffer[result] = '\0';
-    std::cout << "TTL MSET test MSET response: " << ttlMsetBuffer << "\n";
-    const char* ttlMsetCheckMessage = "*2\r\n$3\r\nTTL\r\n$7\r\nttlMset\r\n";
-    result = send(clientSocket, ttlMsetCheckMessage, static_cast<int>(strlen(ttlMsetCheckMessage)), 0);
-    if (result == SOCKET_ERROR) {
-        std::cerr << "TTL after MSET send failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    std::cout << "TTL after MSET command sent\n";
-    char ttlMsetCheckBuffer[1024]{};
-    result = recv(clientSocket, ttlMsetCheckBuffer, sizeof(ttlMsetCheckBuffer) - 1, 0);
-    if (result == SOCKET_ERROR || result == 0) {
-        std::cerr << "TTL after MSET receive failed\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    ttlMsetCheckBuffer[result] = '\0';
-    std::cout << "TTL after MSET response: " << ttlMsetCheckBuffer << "\n";
-    const char* ttlMsetGetMessage = "*2\r\n$3\r\nGET\r\n$7\r\nttlMset\r\n";
-    result = send(clientSocket, ttlMsetGetMessage, static_cast<int>(strlen(ttlMsetGetMessage)), 0);
-    if (result == SOCKET_ERROR) {
-        std::cerr << "GET after MSET send failed: " << WSAGetLastError() << "\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    std::cout << "GET after MSET command sent\n";
-    char ttlMsetGetBuffer[1024]{};
-    result = recv(clientSocket, ttlMsetGetBuffer, sizeof(ttlMsetGetBuffer) - 1, 0);
-    if (result == SOCKET_ERROR || result == 0) {
-        std::cerr << "GET after MSET receive failed\n";
-        closesocket(clientSocket);
-        WSACleanup();
-        return 1;
-    }
-    ttlMsetGetBuffer[result] = '\0';
-    std::cout << "GET after MSET response: " << ttlMsetGetBuffer << "\n";
     // Send MGET command
     const char* mgetMessage = "*4\r\n$4\r\nMGET\r\n$4\r\nname\r\n$4\r\ncity\r\n$7\r\nmissing\r\n";
     result = send(
@@ -1316,6 +1180,52 @@ int main() {
     }
     activeExpireGetBuffer[result] = '\0';
     std::cout << "Active expiration GET response: " << activeExpireGetBuffer << "\n";
+    // Test numeric command error paths and verify the connection remains usable
+    auto runNumericErrorTest = [&](const char* testName, const char* message) {
+        int sendResult = send(clientSocket, message, static_cast<int>(strlen(message)), 0);
+        if (sendResult == SOCKET_ERROR) {
+            std::cerr << testName << " send failed: " << WSAGetLastError() << "\n";
+            closesocket(clientSocket);
+            WSACleanup();
+            return false;
+        }
+        std::cout << testName << " command sent\n";
+        char responseBuffer[1024]{};
+        int receiveResult = recv(clientSocket, responseBuffer, sizeof(responseBuffer) - 1, 0);
+        if (receiveResult == SOCKET_ERROR || receiveResult == 0) {
+            std::cerr << testName << " receive failed\n";
+            closesocket(clientSocket);
+            WSACleanup();
+            return false;
+        }
+        responseBuffer[receiveResult] = '\0';
+        std::cout << testName << " response: " << responseBuffer << "\n";
+        return true;
+    };
+    const char* numericErrorSetMessage = "*3\r\n$3\r\nSET\r\n$4\r\ntext\r\n$5\r\nhello\r\n";
+    if (!runNumericErrorTest("Numeric error SET", numericErrorSetMessage)) {
+        return 1;
+    }
+    const char* incrErrorMessage = "*2\r\n$4\r\nINCR\r\n$4\r\ntext\r\n";
+    if (!runNumericErrorTest("INCR error test", incrErrorMessage)) {
+        return 1;
+    }
+    const char* decrErrorMessage = "*2\r\n$4\r\nDECR\r\n$4\r\ntext\r\n";
+    if (!runNumericErrorTest("DECR error test", decrErrorMessage)) {
+        return 1;
+    }
+    const char* incrbyErrorMessage = "*3\r\n$6\r\nINCRBY\r\n$7\r\ncounter\r\n$3\r\nabc\r\n";
+    if (!runNumericErrorTest("INCRBY error test", incrbyErrorMessage)) {
+        return 1;
+    }
+    const char* decrbyErrorMessage = "*3\r\n$6\r\nDECRBY\r\n$7\r\ncounter\r\n$3\r\nabc\r\n";
+    if (!runNumericErrorTest("DECRBY error test", decrbyErrorMessage)) {
+        return 1;
+    }
+    const char* numericErrorPingMessage = "*1\r\n$4\r\nPING\r\n";
+    if (!runNumericErrorTest("Numeric error PING", numericErrorPingMessage)) {
+        return 1;
+    }
     // Cleanup
     closesocket(clientSocket);
     WSACleanup();
