@@ -654,7 +654,7 @@ void handleClient(SOCKET clientSocket) {
                     seconds = std::stoi(parsedCommand[2]);
                 } catch (...) {
                     std::string response = encodeError("ERR value is not an integer or out of range");
-
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -674,6 +674,7 @@ void handleClient(SOCKET clientSocket) {
                     result = 1;
                 }
                 std::string response = encodeInteger(result);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -686,6 +687,7 @@ void handleClient(SOCKET clientSocket) {
                 auto databaseIterator = database.find(key);
                 if (databaseIterator == database.end()) {
                     std::string response = encodeInteger(-2);
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -697,6 +699,7 @@ void handleClient(SOCKET clientSocket) {
                 auto expirationIterator = expiration.find(key);
                 if (expirationIterator == expiration.end()) {
                     std::string response = encodeInteger(-1);
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -714,6 +717,7 @@ void handleClient(SOCKET clientSocket) {
                 if (remainingTime <= 0) {
                     isKeyExpired(key);
                     std::string response = encodeInteger(-2);
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -723,6 +727,7 @@ void handleClient(SOCKET clientSocket) {
                 }
 
                 std::string response = encodeInteger(static_cast<int>(remainingTime));
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -735,6 +740,7 @@ void handleClient(SOCKET clientSocket) {
                 auto databaseIterator = database.find(key);
                 if (databaseIterator == database.end()) {
                     std::string response = encodeInteger(-2);
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -746,6 +752,7 @@ void handleClient(SOCKET clientSocket) {
                 auto expirationIterator = expiration.find(key);
                 if (expirationIterator == expiration.end()) {
                     std::string response = encodeInteger(-1);
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -762,6 +769,7 @@ void handleClient(SOCKET clientSocket) {
                 if (remainingTime <= 0) {
                     isKeyExpired(key);
                     std::string response = encodeInteger(-2);
+                    lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
                         break;
                     }
@@ -771,6 +779,7 @@ void handleClient(SOCKET clientSocket) {
                 }
 
                 std::string response = encodeInteger(remainingTime);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
@@ -792,6 +801,7 @@ void handleClient(SOCKET clientSocket) {
                 }
 
                 std::string response = encodeInteger(result);
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
