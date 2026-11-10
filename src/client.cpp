@@ -2,7 +2,153 @@
 #include <windows.h>
 #include <iostream>
 #include <cstring>
+#include <thread>
+#include <vector>
+#include <atomic>
+#include <string>
 #pragma comment(lib, "ws2_32.lib")
+
+std::string makeRESPCommand(const std::vector<std::string>& arguments) {
+    std::string request = "*" + std::to_string(arguments.size()) + "\r\n";
+    for (const std::string& argument : arguments) {
+        request += "$" + std::to_string(argument.size()) + "\r\n";
+        request += argument + "\r\n";
+    }
+    return request;
+}
+
+bool sendAndCheckResponse(SOCKET clientSocket, const std::string& request, char expectedPrefix) {
+    size_t totalSent = 0;
+    while (totalSent < request.size()) {
+        int sent = send(clientSocket, request.c_str() + totalSent, static_cast<int>(request.size() - totalSent), 0);
+        if (sent <= 0) {
+            return false;
+        }
+        totalSent += sent;
+    }
+
+    std::string response;
+    char buffer[1024]{};
+    while (response.find("\r\n") == std::string::npos) {
+        int received = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if (received <= 0) {
+            return false;
+        }
+        response.append(buffer, received);
+    }
+
+    if (response.empty() || response[0] != expectedPrefix) {
+        return false;
+    }
+
+    if (expectedPrefix == '$') {
+        int bulkLength = std::stoi(response.substr(1, response.find("\r\n") - 1));
+        if (bulkLength >= 0) {
+            size_t expectedSize = response.find("\r\n") + 2 + bulkLength + 2;
+            while (response.size() < expectedSize) {
+                int received = recv(clientSocket, buffer, sizeof(buffer), 0);
+                if (received <= 0) {
+                    return false;
+                }
+                response.append(buffer, received);
+            }
+        }
+    }
+
+    return true;
+}
+
+void mixedOperationsWorker(int clientId, int iterations, std::atomic<bool>& testPassed) {
+    SOCKET workerSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (workerSocket == INVALID_SOCKET) {
+        testPassed = false;
+        return;
+    }
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    serverAddress.sin_port = htons(6379);
+
+    if (connect(workerSocket, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) == SOCKET_ERROR) {
+        testPassed = false;
+        closesocket(workerSocket);
+        return;
+    }
+
+    std::string key = "mixed_key_" + std::to_string(clientId);
+
+    for (int i = 0; i < iterations; i++) {
+        if (!sendAndCheckResponse(workerSocket, makeRESPCommand({"SET", key, "start"}), '+') ||
+            !sendAndCheckResponse(workerSocket, makeRESPCommand({"APPEND", key, "x"}), ':') ||
+            !sendAndCheckResponse(workerSocket, makeRESPCommand({"GET", key}), '$') ||
+            !sendAndCheckResponse(workerSocket, makeRESPCommand({"EXPIRE", key, "60"}), ':') ||
+            !sendAndCheckResponse(workerSocket, makeRESPCommand({"TTL", key}), ':') ||
+            !sendAndCheckResponse(workerSocket, makeRESPCommand({"PERSIST", key}), ':') ||
+            !sendAndCheckResponse(workerSocket, makeRESPCommand({"DEL", key}), ':')) {
+            testPassed = false;
+            closesocket(workerSocket);
+            return;
+        }
+    }
+
+    closesocket(workerSocket);
+}
+
+void incrementCounter(int iterations, std::atomic<bool>& testPassed) {
+    SOCKET workerSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (workerSocket == INVALID_SOCKET) {
+        testPassed = false;
+        return;
+    }
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    serverAddress.sin_port = htons(6379);
+
+    if (connect(workerSocket, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) == SOCKET_ERROR) {
+        testPassed = false;
+        closesocket(workerSocket);
+        return;
+    }
+
+    const std::string request = "*2\r\n$4\r\nINCR\r\n$14\r\nstress_counter\r\n";
+
+    for (int i = 0; i < iterations; i++) {
+        size_t totalSent = 0;
+        while (totalSent < request.size()) {
+            int sent = send(workerSocket, request.c_str() + totalSent, static_cast<int>(request.size() - totalSent), 0);
+            if (sent == SOCKET_ERROR || sent == 0) {
+                testPassed = false;
+                closesocket(workerSocket);
+                return;
+            }
+            totalSent += sent;
+        }
+
+        std::string response;
+        char buffer[32]{};
+        while (response.find("\r\n") == std::string::npos) {
+            int received = recv(workerSocket, buffer, sizeof(buffer), 0);
+            if (received <= 0) {
+                testPassed = false;
+                closesocket(workerSocket);
+                return;
+            }
+            response.append(buffer, received);
+        }
+
+        if (response[0] != ':') {
+            testPassed = false;
+            closesocket(workerSocket);
+            return;
+        }
+    }
+
+    closesocket(workerSocket);
+}
+
 int main() {
     // Initialize Winsock
     WSADATA wsaData{};
@@ -1226,6 +1372,98 @@ int main() {
     if (!runNumericErrorTest("Numeric error PING", numericErrorPingMessage)) {
         return 1;
     }
+
+        // Step 66: Test concurrent INCR operations
+    const char* stressSetMessage = "*3\r\n$3\r\nSET\r\n$14\r\nstress_counter\r\n$1\r\n0\r\n";
+    result = send(clientSocket, stressSetMessage, static_cast<int>(strlen(stressSetMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Stress test SET failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    char stressSetBuffer[1024]{};
+    result = recv(clientSocket, stressSetBuffer, sizeof(stressSetBuffer) - 1, 0);
+    if (result <= 0) {
+        std::cerr << "Stress test SET receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    const int clientCount = 5;
+    const int incrementsPerClient = 1000;
+    std::atomic<bool> testPassed{true};
+    std::vector<std::thread> clients;
+
+    std::cout << "Starting concurrent INCR test...\n";
+
+    for (int i = 0; i < clientCount; i++) {
+        clients.emplace_back(incrementCounter, incrementsPerClient, std::ref(testPassed));
+    }
+
+    for (std::thread& client : clients) {
+        client.join();
+    }
+
+    if (!testPassed) {
+        std::cerr << "Concurrent INCR test failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    const char* stressGetMessage = "*2\r\n$3\r\nGET\r\n$14\r\nstress_counter\r\n";
+    result = send(clientSocket, stressGetMessage, static_cast<int>(strlen(stressGetMessage)), 0);
+    if (result == SOCKET_ERROR) {
+        std::cerr << "Stress test GET failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    char stressGetBuffer[1024]{};
+    result = recv(clientSocket, stressGetBuffer, sizeof(stressGetBuffer) - 1, 0);
+    if (result <= 0) {
+        std::cerr << "Stress test GET receive failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    stressGetBuffer[result] = '\0';
+    std::cout << "Concurrent INCR final value: " << stressGetBuffer;
+    std::cout << "Expected value: " << clientCount * incrementsPerClient << "\n";
+
+        // Step 67: Test mixed concurrent operations
+    const int mixedOperationsPerClient = 100;
+    std::vector<std::thread> mixedClients;
+
+    std::cout << "Starting mixed concurrent operations test...\n";
+
+    for (int i = 0; i < clientCount; i++) {
+        mixedClients.emplace_back([i, mixedOperationsPerClient, &testPassed]() {
+            mixedOperationsWorker(i, mixedOperationsPerClient, testPassed);
+        });
+    }
+
+    for (std::thread& client : mixedClients) {
+        client.join();
+    }
+
+    if (!testPassed) {
+        std::cerr << "Mixed concurrent operations test failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "Mixed concurrent operations test passed\n";
+    std::cout << "Clients: " << clientCount << "\n";
+    std::cout << "Operations per client: " << mixedOperationsPerClient << "\n";
+    std::cout << "Total commands: " << clientCount * mixedOperationsPerClient * 7 << "\n";
+
     // Cleanup
     closesocket(clientSocket);
     WSACleanup();

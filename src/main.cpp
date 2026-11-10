@@ -828,7 +828,7 @@ void handleClient(SOCKET clientSocket) {
                 } else {
                     response = encodeError("ERR unknown command");
                 }
-
+                lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
                     break;
                 }
