@@ -880,7 +880,26 @@ void handleClient(SOCKET clientSocket) {
             // Handle unknown commands and incorrect arguments
             } else {
                 std::string response;
-                if (command == "PING" || command == "ECHO" || command == "SET" || command == "GET" || command == "DEL" || command == "EXISTS" || command == "INCR" || command == "DECR" || command == "INCRBY" || command == "DECRBY" || command == "EXPIRE" || command == "TTL" || command == "PTTL" || command == "MSET" || command == "MGET" || command == "PERSIST") {
+                if (command == "PING" ||
+                    command == "ECHO" ||
+                    command == "SET" ||
+                    command == "SETNX" ||
+                    command == "APPEND" ||
+                    command == "STRLEN" ||
+                    command == "TYPE" ||
+                    command == "GET" ||
+                    command == "DEL" ||
+                    command == "EXISTS" ||
+                    command == "INCR" ||
+                    command == "DECR" ||
+                    command == "INCRBY" ||
+                    command == "DECRBY" ||
+                    command == "EXPIRE" ||
+                    command == "TTL" ||
+                    command == "PTTL" ||
+                    command == "PERSIST" ||
+                    command == "MSET" ||
+                    command == "MGET") {
                     response = encodeError("ERR wrong number of arguments for command");
                 } else {
                     response = encodeError("ERR unknown command");
