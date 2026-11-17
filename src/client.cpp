@@ -128,6 +128,60 @@ void sameKeyAppendWorker(std::string key, int iterations, std::atomic<bool>& tes
     closesocket(workerSocket);
 }
 
+
+void concurrentReadWriteExpirationWorker(int workerId, const std::string& key, int iterations, std::atomic<bool>& testPassed) {
+    SOCKET workerSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (workerSocket == INVALID_SOCKET) {
+        testPassed = false;
+        return;
+    }
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    serverAddress.sin_port = htons(6379);
+
+    if (connect(workerSocket, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) == SOCKET_ERROR) {
+        testPassed = false;
+        closesocket(workerSocket);
+        return;
+    }
+
+    for (int i = 0; i < iterations; i++) {
+        bool operationPassed = true;
+
+        if (workerId % 3 == 0) {
+            operationPassed =
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"SET", key, "writer"}), '+') &&
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"APPEND", key, "x"}), ':');
+        } else if (workerId % 3 == 1) {
+            operationPassed =
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"GET", key}), '$') &&
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"EXISTS", key}), ':') &&
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"TTL", key}), ':') &&
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"PTTL", key}), ':');
+        } else {
+            operationPassed =
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"EXPIRE", key, "0"}), ':') &&
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"PTTL", key}), ':') &&
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"PERSIST", key}), ':') &&
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"EXPIRE", key, "1"}), ':') &&
+                sendAndCheckResponse(workerSocket, makeRESPCommand({"TTL", key}), ':');
+
+            Sleep(1);
+        }
+
+        if (!operationPassed) {
+            testPassed = false;
+            closesocket(workerSocket);
+            return;
+        }
+    }
+
+    closesocket(workerSocket);
+}
+
+
 void incrementCounter(int iterations, std::atomic<bool>& testPassed) {
     SOCKET workerSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
     if (workerSocket == INVALID_SOCKET) {
@@ -1549,6 +1603,86 @@ int main() {
     std::cout << "Clients: " << clientCount << "\n";
     std::cout << "APPEND operations per client: " << sameKeyOperationsPerClient << "\n";
     std::cout << "Expected final string length: " << expectedLength << "\n";
+
+
+    // Step 69: Test concurrent reads, writes, and expiration on the same key
+    const std::string concurrentKey = "concurrent_expire_key";
+    const int concurrentClientCount = 6;
+    const int concurrentOperationsPerClient = 200;
+
+    std::cout << "Starting concurrent read/write/expiration test...\n";
+
+    if (!sendAndCheckResponse(clientSocket, makeRESPCommand({"SET", concurrentKey, "initial"}), '+', "+OK\r\n")) {
+        std::cerr << "Concurrent test initialization failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::vector<std::thread> concurrentClients;
+
+    for (int i = 0; i < concurrentClientCount; i++) {
+        concurrentClients.emplace_back(
+            concurrentReadWriteExpirationWorker,
+            i,
+            concurrentKey,
+            concurrentOperationsPerClient,
+            std::ref(testPassed)
+        );
+    }
+
+    for (std::thread& client : concurrentClients) {
+        client.join();
+    }
+
+    if (!testPassed) {
+        std::cerr << "Concurrent read/write/expiration test failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "Concurrent operations completed successfully\n";
+
+    // Verify deterministic behavior after concurrent operations
+    if (!sendAndCheckResponse(clientSocket, makeRESPCommand({"SET", concurrentKey, "stable_value"}), '+', "+OK\r\n") ||
+        !sendAndCheckResponse(clientSocket, makeRESPCommand({"GET", concurrentKey}), '$', "$12\r\nstable_value\r\n") ||
+        !sendAndCheckResponse(clientSocket, makeRESPCommand({"TTL", concurrentKey}), ':', ":-1\r\n") ||
+        !sendAndCheckResponse(clientSocket, makeRESPCommand({"PTTL", concurrentKey}), ':', ":-1\r\n") ||
+        !sendAndCheckResponse(clientSocket, makeRESPCommand({"PERSIST", concurrentKey}), ':', ":0\r\n")) {
+        std::cerr << "Post-concurrency data verification failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    // Verify expiration after concurrent operations
+    if (!sendAndCheckResponse(clientSocket, makeRESPCommand({"EXPIRE", concurrentKey, "1"}), ':', ":1\r\n")) {
+        std::cerr << "Expiration verification setup failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "Waiting for concurrent test key to expire...\n";
+    Sleep(2000);
+
+    if (!sendAndCheckResponse(clientSocket, makeRESPCommand({"GET", concurrentKey}), '$', "$-1\r\n") ||
+        !sendAndCheckResponse(clientSocket, makeRESPCommand({"EXISTS", concurrentKey}), ':', ":0\r\n") ||
+        !sendAndCheckResponse(clientSocket, makeRESPCommand({"TTL", concurrentKey}), ':', ":-2\r\n") ||
+        !sendAndCheckResponse(clientSocket, makeRESPCommand({"PTTL", concurrentKey}), ':', ":-2\r\n")) {
+        std::cerr << "Post-expiration verification failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "Concurrent read/write/expiration test passed\n";
+    std::cout << "Clients: " << concurrentClientCount << "\n";
+    std::cout << "Operations per client: " << concurrentOperationsPerClient << "\n";
+    std::cout << "Total concurrent operations: "
+              << concurrentClientCount * concurrentOperationsPerClient << "\n";
+
 
     // Cleanup
     closesocket(clientSocket);

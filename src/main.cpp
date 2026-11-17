@@ -9,6 +9,7 @@
 #include <vector>
 #include <algorithm>
 #include <chrono>
+#include <limits>
 
 #pragma comment(lib, "ws2_32.lib")
 // Store Redis key-value pairs
@@ -97,6 +98,28 @@ bool commandUsesKey(const std::string& command) {
            command == "PERSIST";
 }
 
+// Safely parse a non-negative RESP length
+bool parseRESPLength(const std::string& request, size_t start, size_t end, size_t& value) {
+    if (start >= end) {
+        return false;
+    }
+    value = 0;
+
+    for (size_t i = start; i < end; i++) {
+        if (request[i] < '0' || request[i] > '9') {
+            return false;
+        }
+
+        size_t digit = request[i] - '0';
+        if (value > (std::numeric_limits<size_t>::max() - digit) / 10) {
+            return false;
+        }
+
+        value = value * 10 + digit;
+    }
+    return true;
+}
+
 // Parse a RESP array command
 std::vector<std::string> parseRESP(const std::string& request) {
     std::vector<std::string> command;
@@ -104,94 +127,117 @@ std::vector<std::string> parseRESP(const std::string& request) {
         return command;
     }
 
-    size_t position = request.find("\r\n");
-    if (position == std::string::npos) {
+    size_t lineEnd = request.find("\r\n");
+    if (lineEnd == std::string::npos) {
         return command;
     }
 
-    int argumentCount = std::stoi(request.substr(1, position - 1));
-    position += 2;
+    size_t argumentCount = 0;
+    if (!parseRESPLength(request, 1, lineEnd, argumentCount)) {
+        return command;
+    }
 
-    for (int i = 0; i < argumentCount; i++) {
+    size_t position = lineEnd + 2;
+    for (size_t i = 0; i < argumentCount; i++) {
         if (position >= request.size() || request[position] != '$') {
-            command.clear();
-            return command;
+            return {};
         }
 
         size_t lengthEnd = request.find("\r\n", position);
         if (lengthEnd == std::string::npos) {
-            command.clear();
-            return command;
+            return {};
         }
 
-        int argumentLength = std::stoi(
-            request.substr(position + 1, lengthEnd - position - 1)
-        );
+        size_t argumentLength = 0;
+        if (!parseRESPLength(request, position + 1, lengthEnd, argumentLength)) {
+            return {};
+        }
 
         position = lengthEnd + 2;
-        if (position + argumentLength + 2 > request.size()) {
-            command.clear();
-            return command;
+        if (argumentLength > request.size() - position) {
+            return {};
         }
 
         std::string argument = request.substr(position, argumentLength);
+        position += argumentLength;
+        if (request.size() - position < 2 || request.compare(position, 2, "\r\n") != 0) {
+            return {};
+        }
+
         command.push_back(argument);
-        position += argumentLength + 2;
+        position += 2;
     }
 
+    if (position != request.size()) {
+        return {};
+    }
     return command;
 }
 
+// RESP command extraction result
+enum class RESPParseStatus {
+    Incomplete,
+    Complete,
+    Invalid
+};
+
 // Extract one complete RESP command from the buffer
-bool extractRESPCommand(std::string& buffer, std::string& command) {
-    if (buffer.empty() || buffer[0] != '*') {
-        return false;
+RESPParseStatus extractRESPCommand(std::string& buffer, std::string& command) {
+    if (buffer.empty()) {
+        return RESPParseStatus::Incomplete;
+    }
+    if (buffer[0] != '*') {
+        return RESPParseStatus::Invalid;
     }
 
     size_t position = 0;
     size_t lineEnd = buffer.find("\r\n", position);
-
     if (lineEnd == std::string::npos) {
-        return false;
+        return RESPParseStatus::Incomplete;
     }
 
-    int argumentCount = std::stoi(buffer.substr(1, lineEnd - 1));
+    size_t argumentCount = 0;
+    if (!parseRESPLength(buffer, 1, lineEnd, argumentCount)) {
+        return RESPParseStatus::Invalid;
+    }
+
     position = lineEnd + 2;
-
-    for (int i = 0; i < argumentCount; i++) {
+    for (size_t i = 0; i < argumentCount; i++) {
         if (position >= buffer.size()) {
-            return false;
+            return RESPParseStatus::Incomplete;
         }
-
         if (buffer[position] != '$') {
-            return false;
+            return RESPParseStatus::Invalid;
         }
 
         lineEnd = buffer.find("\r\n", position);
-
         if (lineEnd == std::string::npos) {
-            return false;
+            return RESPParseStatus::Incomplete;
         }
 
-        int argumentLength = std::stoi(
-            buffer.substr(position + 1, lineEnd - position - 1)
-        );
+        size_t argumentLength = 0;
+        if (!parseRESPLength(buffer, position + 1, lineEnd, argumentLength)) {
+            return RESPParseStatus::Invalid;
+        }
 
         position = lineEnd + 2;
-        if (buffer.size() < position + argumentLength + 2) {
-            return false;
+        if (argumentLength > buffer.size() - position) {
+            return RESPParseStatus::Incomplete;
         }
+
         position += argumentLength;
-        if (buffer.substr(position, 2) != "\r\n") {
-            return false;
+        if (buffer.size() - position < 2) {
+            return RESPParseStatus::Incomplete;
+        }
+        if (buffer.compare(position, 2, "\r\n") != 0) {
+            return RESPParseStatus::Invalid;
         }
         position += 2;
     }
 
     command = buffer.substr(0, position);
     buffer.erase(0, position);
-
-    return true;
+    return RESPParseStatus::Complete;
 }
 
 // Create a RESP simple string response
@@ -264,7 +310,7 @@ void handleClient(SOCKET clientSocket) {
     std::string receiveBuffer;
 
     // Keep the client connection alive
-    while (true) {
+    while(true) {
         // Receive raw TCP 
         char buffer[1024]{};
         int result = recv(clientSocket, buffer, sizeof(buffer), 0);
@@ -279,8 +325,19 @@ void handleClient(SOCKET clientSocket) {
 
         // Add received data to the persistent buffer
         receiveBuffer.append(buffer, result);
-        std::string request;
-        while (extractRESPCommand(receiveBuffer, request)) {
+        bool malformedRequest = false;
+
+        while(true) {
+            std::string request;
+            RESPParseStatus parseStatus = extractRESPCommand(receiveBuffer, request);
+            if (parseStatus == RESPParseStatus::Incomplete) {
+                break;
+            }
+            if (parseStatus == RESPParseStatus::Invalid) {
+                sendResponse(clientSocket, encodeError("ERR invalid RESP request"));
+                malformedRequest = true;
+                break;
+            }
             std::cout << "Received complete RESP command: " << request << "\n";
 
             // Parse the complete RESP command
@@ -834,6 +891,10 @@ void handleClient(SOCKET clientSocket) {
                 }
                 std::cout << "Error response sent\n";
             }
+        }
+    
+        if (malformedRequest){
+            break;
         }
     }
 }
