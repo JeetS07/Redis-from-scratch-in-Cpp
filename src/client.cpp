@@ -17,7 +17,7 @@ std::string makeRESPCommand(const std::vector<std::string>& arguments) {
     return request;
 }
 
-bool sendAndCheckResponse(SOCKET clientSocket, const std::string& request, char expectedPrefix) {
+bool sendAndCheckResponse(SOCKET clientSocket, const std::string& request, char expectedPrefix, const std::string& expectedResponse = "") {
     size_t totalSent = 0;
     while (totalSent < request.size()) {
         int sent = send(clientSocket, request.c_str() + totalSent, static_cast<int>(request.size() - totalSent), 0);
@@ -55,6 +55,10 @@ bool sendAndCheckResponse(SOCKET clientSocket, const std::string& request, char 
         }
     }
 
+    if (!expectedResponse.empty() && response != expectedResponse) {
+        return false;
+    }
+
     return true;
 }
 
@@ -86,6 +90,35 @@ void mixedOperationsWorker(int clientId, int iterations, std::atomic<bool>& test
             !sendAndCheckResponse(workerSocket, makeRESPCommand({"TTL", key}), ':') ||
             !sendAndCheckResponse(workerSocket, makeRESPCommand({"PERSIST", key}), ':') ||
             !sendAndCheckResponse(workerSocket, makeRESPCommand({"DEL", key}), ':')) {
+            testPassed = false;
+            closesocket(workerSocket);
+            return;
+        }
+    }
+
+    closesocket(workerSocket);
+}
+
+void sameKeyAppendWorker(std::string key, int iterations, std::atomic<bool>& testPassed) {
+    SOCKET workerSocket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+    if (workerSocket == INVALID_SOCKET) {
+        testPassed = false;
+        return;
+    }
+
+    sockaddr_in serverAddress{};
+    serverAddress.sin_family = AF_INET;
+    serverAddress.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    serverAddress.sin_port = htons(6379);
+
+    if (connect(workerSocket, reinterpret_cast<sockaddr*>(&serverAddress), sizeof(serverAddress)) == SOCKET_ERROR) {
+        testPassed = false;
+        closesocket(workerSocket);
+        return;
+    }
+
+    for (int i = 0; i < iterations; i++) {
+        if (!sendAndCheckResponse(workerSocket, makeRESPCommand({"APPEND", key, "x"}), ':')) {
             testPassed = false;
             closesocket(workerSocket);
             return;
@@ -1464,8 +1497,62 @@ int main() {
     std::cout << "Operations per client: " << mixedOperationsPerClient << "\n";
     std::cout << "Total commands: " << clientCount * mixedOperationsPerClient * 7 << "\n";
 
+        // Step 68: Test concurrent APPEND operations on the same key
+    const std::string sameKey = "same_key_append";
+    const int sameKeyOperationsPerClient = 1000;
+
+    std::cout << "Starting same-key concurrent APPEND test...\n";
+
+    if (!sendAndCheckResponse(clientSocket, makeRESPCommand({"SET", sameKey, ""}), '+', "+OK\r\n")) {
+        std::cerr << "Same-key test initialization failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::vector<std::thread> sameKeyClients;
+
+    for (int i = 0; i < clientCount; i++) {
+        sameKeyClients.emplace_back(sameKeyAppendWorker, sameKey, sameKeyOperationsPerClient, std::ref(testPassed));
+    }
+
+    for (std::thread& client : sameKeyClients) {
+        client.join();
+    }
+
+    if (!testPassed) {
+        std::cerr << "Same-key concurrent APPEND test failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    const int expectedLength = clientCount * sameKeyOperationsPerClient;
+    const std::string expectedValue(expectedLength, 'x');
+    const std::string expectedBulkResponse = "$" + std::to_string(expectedLength) + "\r\n" + expectedValue + "\r\n";
+
+    if (!sendAndCheckResponse(clientSocket, makeRESPCommand({"GET", sameKey}), '$', expectedBulkResponse)) {
+        std::cerr << "Same-key concurrent APPEND data verification failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    if (!sendAndCheckResponse(clientSocket, makeRESPCommand({"STRLEN", sameKey}), ':', ":" + std::to_string(expectedLength) + "\r\n")) {
+        std::cerr << "Same-key concurrent APPEND length verification failed\n";
+        closesocket(clientSocket);
+        WSACleanup();
+        return 1;
+    }
+
+    std::cout << "Same-key concurrent APPEND test passed\n";
+    std::cout << "Clients: " << clientCount << "\n";
+    std::cout << "APPEND operations per client: " << sameKeyOperationsPerClient << "\n";
+    std::cout << "Expected final string length: " << expectedLength << "\n";
+
     // Cleanup
     closesocket(clientSocket);
     WSACleanup();
     return 0;
 }
+
