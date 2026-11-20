@@ -98,6 +98,30 @@ bool commandUsesKey(const std::string& command) {
            command == "PERSIST";
 }
 
+// Safely add two integers without overflow
+bool safeAdd(int first, int second, int& result) {
+    if (second > 0 && first > std::numeric_limits<int>::max() - second) {
+        return false;
+    }
+    if (second < 0 && first < std::numeric_limits<int>::min() - second) {
+        return false;
+    }
+    result = first + second;
+    return true;
+}
+
+// Safely subtract two integers without overflow
+bool safeSubtract(int first, int second, int& result) {
+    if (second > 0 && first < std::numeric_limits<int>::min() + second) {
+        return false;
+    }
+    if (second < 0 && first > std::numeric_limits<int>::max() + second) {
+        return false;
+    }
+    result = first - second;
+    return true;
+}
+
 // Safely parse a non-negative RESP length
 bool parseRESPLength(const std::string& request, size_t start, size_t end, size_t& value) {
     if (start >= end) {
@@ -571,7 +595,17 @@ void handleClient(SOCKET clientSocket) {
                     }
                 }
 
-                value++;
+                int updatedValue = 0;
+                if (!safeAdd(value, 1, updatedValue)) {
+                    std::string response = encodeError("ERR increment or decrement would overflow");
+                    lock.unlock();
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+                    continue;
+                }
+
+                value = updatedValue;
                 database[key] = std::to_string(value);
                 std::string response = encodeInteger(value);
                 lock.unlock();
@@ -602,8 +636,19 @@ void handleClient(SOCKET clientSocket) {
                     }
                 }
 
-                value--;
+                int updatedValue = 0;
+                if (!safeSubtract(value, 1, updatedValue)) {
+                    std::string response = encodeError("ERR increment or decrement would overflow");
+                    lock.unlock();
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+                    continue;
+                }
+
+                value = updatedValue;
                 database[key] = std::to_string(value);
+
                 std::string response = encodeInteger(value);
                 lock.unlock();
                 if (!sendResponse(clientSocket, response)) {
@@ -646,7 +691,17 @@ void handleClient(SOCKET clientSocket) {
                     }
                 }
 
-                value += increment;
+                int updatedValue = 0;
+                if (!safeAdd(value, increment, updatedValue)) {
+                    std::string response = encodeError("ERR increment or decrement would overflow");
+                    lock.unlock();
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+                    continue;
+                }
+
+                value = updatedValue;
                 database[key] = std::to_string(value);
                 std::string response = encodeInteger(value);
                 lock.unlock();
@@ -692,7 +747,17 @@ void handleClient(SOCKET clientSocket) {
                     }
                 }
 
-                value -= decrement;
+                int updatedValue = 0;
+                if (!safeSubtract(value, decrement, updatedValue)) {
+                    std::string response = encodeError("ERR increment or decrement would overflow");
+                    lock.unlock();
+                    if (!sendResponse(clientSocket, response)) {
+                        break;
+                    }
+                    continue;
+                }
+
+                value = updatedValue;
                 database[key] = std::to_string(value);
                 std::string response = encodeInteger(value);
                 lock.unlock();
