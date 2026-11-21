@@ -122,6 +122,33 @@ bool safeSubtract(int first, int second, int& result) {
     return true;
 }
 
+// Safely parse a complete signed integer
+bool parseInteger(const std::string& input, int& value) {
+    if (input.empty()) {
+        return false;
+    }
+
+    size_t position = 0;
+    if (input[0] == '-' || input[0] == '+') {
+        position++;
+    }
+    if (position == input.size()) {
+        return false;
+    }
+    for (; position < input.size(); position++) {
+        if (input[position] < '0' || input[position] > '9') {
+            return false;
+        }
+    }
+    try {
+        size_t parsedLength = 0;
+        value = std::stoi(input, &parsedLength);
+        return parsedLength == input.size();
+    } catch (...) {
+        return false;
+    }
+}
+
 // Safely parse a non-negative RESP length
 bool parseRESPLength(const std::string& request, size_t start, size_t end, size_t& value) {
     if (start >= end) {
@@ -581,9 +608,7 @@ void handleClient(SOCKET clientSocket) {
                 int value = 0;
 
                 if (iterator != database.end()) {
-                    try {
-                        value = std::stoi(iterator->second);
-                    } catch (...) {
+                    if (!parseInteger(iterator->second, value)) {
                         std::string response = encodeError("ERR value is not an integer or out of range");
                         lock.unlock();
                         if (!sendResponse(clientSocket, response)) {
@@ -622,9 +647,7 @@ void handleClient(SOCKET clientSocket) {
                 int value = 0;
 
                 if (iterator != database.end()) {
-                    try {
-                        value = std::stoi(iterator->second);
-                    } catch (...) {
+                    if (!parseInteger(iterator->second, value)) {
                         std::string response = encodeError("ERR value is not an integer or out of range");
                         lock.unlock();
                         if (!sendResponse(clientSocket, response)) {
@@ -661,9 +684,7 @@ void handleClient(SOCKET clientSocket) {
             } else if (command == "INCRBY" && parsedCommand.size() == 3) {
                 const std::string& key = parsedCommand[1];
                 int increment = 0;
-                try {
-                    increment = std::stoi(parsedCommand[2]);
-                } catch (...) {
+                if (!parseInteger(parsedCommand[2], increment)) {
                     std::string response = encodeError("ERR value is not an integer or out of range");
                     lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
@@ -677,9 +698,7 @@ void handleClient(SOCKET clientSocket) {
                 auto iterator = database.find(key);
                 int value = 0;
                 if (iterator != database.end()) {
-                    try {
-                        value = std::stoi(iterator->second);
-                    } catch (...) {
+                    if (!parseInteger(iterator->second, value)) {
                         std::string response = encodeError("ERR value is not an integer or out of range");
                         lock.unlock();
                         if (!sendResponse(clientSocket, response)) {
@@ -716,9 +735,7 @@ void handleClient(SOCKET clientSocket) {
                 const std::string& key = parsedCommand[1];
                 int decrement = 0;
 
-                try {
-                    decrement = std::stoi(parsedCommand[2]);
-                } catch (...) {
+                if (!parseInteger(parsedCommand[2], decrement)) {
                     std::string response = encodeError("ERR value is not an integer or out of range");
                     lock.unlock();
                     if (!sendResponse(clientSocket, response)) {
@@ -733,9 +750,7 @@ void handleClient(SOCKET clientSocket) {
                 int value = 0;
 
                 if (iterator != database.end()) {
-                    try {
-                        value = std::stoi(iterator->second);
-                    } catch (...) {
+                    if (!parseInteger(iterator->second, value)) {
                         std::string response = encodeError("ERR value is not an integer or out of range");
                         lock.unlock();
                         if (!sendResponse(clientSocket, response)) {
